@@ -3,6 +3,13 @@ import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, Clock, Trash2, Save, AlertCircle, Sparkles, ChevronLeft, ChevronRight, ChevronDown, Plus, X, Check, MapPin, Edit } from 'lucide-react';
 import { apiFetch } from '../api';
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AVAILABLE_COLORS = (() => {
   const colors = [];
@@ -367,7 +374,7 @@ const formatTimetableDate = (dateStr) => {
 const checkIsPast = (dateStr, endTimeStr) => {
   if (!dateStr || !endTimeStr) return false;
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = getLocalDateString(today);
   if (dateStr < todayStr) return true;
   if (dateStr > todayStr) return false;
   const currentHHMM = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
@@ -625,7 +632,7 @@ export default function BookingView({ bookings = [], students = [], categories =
   };
 
   // ── Derived data ──
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const selectedDateBookings = bookings.filter(b => b.date === selectedDateStr).sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   // ── Render ────────────────────────────────────────────────────────────────

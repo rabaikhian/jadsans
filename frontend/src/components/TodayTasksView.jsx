@@ -3,6 +3,13 @@ import { createPortal } from 'react-dom';
 import { Clock, BookOpen, Users, Shield, UserCheck, MapPin, ClipboardList, ChevronLeft, ChevronRight, Calendar, Trash2, CornerUpLeft, X, ChevronDown, Palette } from 'lucide-react';
 import { apiFetch } from '../api';
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 
 const PASTEL_COLORS = [
   '#ffb3c6', '#ffc6ff', '#ffd1dc', '#ffcdd2', '#ffe5d9', '#ffdac1', '#ffd8be', '#ffe0b2',
@@ -279,7 +286,7 @@ export default function TodayTasksView({ bookings = [], students = [], categorie
   const [editColor, setEditColor] = useState(PASTEL_COLORS[0]);
 
   // Format YYYY-MM-DD for matching bookings
-  const selectedDateStr = selectedDate.toISOString().split('T')[0];
+  const selectedDateStr = getLocalDateString(selectedDate);
   const targetBookings = bookings.filter(b => b.date === selectedDateStr);
 
   const changeDate = (days) => {
@@ -936,7 +943,7 @@ export default function TodayTasksView({ bookings = [], students = [], categorie
         // --- Calculate sorted list (upcoming first, then past) ---
         const sortedAllBookings = (() => {
           const sorted = [...targetBookings].sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
-          const todayStr = new Date().toISOString().split('T')[0];
+          const todayStr = getLocalDateString();
           if (selectedDateStr !== todayStr) {
             return sorted;
           }

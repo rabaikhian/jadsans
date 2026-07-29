@@ -367,7 +367,11 @@ app.post('/api/bookings', async (req, res) => {
     // 30-minute buffer travel-time check between different students
     const startB = timeToMinutes(start_time);
     const endB = timeToMinutes(end_time);
-    const sameDateBookings = dbService.getAllBookings().filter(b => b.date === date);
+    const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
+    const sameDateBookings = dbService.getAllBookings().filter(b => 
+      b.date === date && 
+      (b.user_email || 'mock.student@gmail.com') === userEmail
+    );
 
     for (const b of sameDateBookings) {
       const startA = timeToMinutes(b.start_time);
@@ -410,7 +414,6 @@ app.post('/api/bookings', async (req, res) => {
       console.warn('Booking created while not signed in to Google. Local-only save.');
     }
 
-    const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
     const newBooking = dbService.createBooking({
       class_name,
       student_name,
@@ -450,7 +453,12 @@ app.put('/api/bookings/:id', async (req, res) => {
     // 30-minute buffer travel-time check between different students (excluding self)
     const startB = timeToMinutes(start_time);
     const endB = timeToMinutes(end_time);
-    const sameDateBookings = dbService.getAllBookings().filter(b => b.date === date && b.id !== Number(id));
+    const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
+    const sameDateBookings = dbService.getAllBookings().filter(b => 
+      b.date === date && 
+      b.id !== Number(id) && 
+      (b.user_email || 'mock.student@gmail.com') === userEmail
+    );
 
     for (const b of sameDateBookings) {
       const startA = timeToMinutes(b.start_time);
