@@ -49,7 +49,7 @@ export default function App() {
   const [isMockMode, setIsMockMode] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [students, setStudents] = useState([]);
-  const [categories, setCategories] = useState(['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า']);
+  const [categories, setCategories] = useState(['งานสอน']);
   const [authLoading, setAuthLoading] = useState(true);
   const [bookingsLoading, setBookingsLoading] = useState(false);
 
@@ -57,34 +57,40 @@ export default function App() {
 
   const fetchStudents = async () => {
     if (user?.isDemo) {
-      setStudents(getDemoStudents());
-      return;
+      const demo = getDemoStudents();
+      setStudents(demo);
+      return demo;
     }
     try {
       const response = await apiFetch('/api/students' + window.location.search);
       if (response.ok) {
         const data = await response.json();
         setStudents(data);
+        return data;
       }
     } catch (err) {
       console.error('Error fetching students:', err);
     }
+    return null;
   };
 
   const fetchCategories = async () => {
     if (user?.isDemo) {
-      setCategories(['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า']);
-      return;
+      const demo = ['งานสอน'];
+      setCategories(demo);
+      return demo;
     }
     try {
       const response = await apiFetch('/api/categories');
       if (response.ok) {
         const data = await response.json();
         setCategories(data);
+        return data;
       }
     } catch (err) {
       console.error('Error fetching categories:', err);
     }
+    return null;
   };
 
   useEffect(() => {
@@ -162,26 +168,83 @@ export default function App() {
   const fetchBookings = async () => {
     setBookingsLoading(true);
     if (user?.isDemo) {
-      setBookings(getDemoBookings());
+      const demo = getDemoBookings();
+      setBookings(demo);
       setBookingsLoading(false);
-      return;
+      return demo;
     }
     try {
       const response = await apiFetch('/api/bookings' + window.location.search);
       if (response.ok) {
         const data = await response.json();
         setBookings(data);
+        return data;
       }
     } catch (err) {
       console.error('Error fetching bookings:', err);
     } finally {
       setBookingsLoading(false);
     }
+    return null;
   };
+
+  const checkAndAutoRestore = async (fetchedBookings, fetchedStudents, fetchedCategories) => {
+    // Don't auto-restore if anonymous visitor or in demo mode
+    const activeEmail = user?.email;
+    if (!activeEmail || user?.isDemo) return;
+
+    // A wiped database has 0 bookings and 0 students
+    const isBackendEmpty = 
+      Array.isArray(fetchedBookings) && fetchedBookings.length === 0 && 
+      Array.isArray(fetchedStudents) && fetchedStudents.length === 0;
+      
+    if (!isBackendEmpty) return;
+
+    // Retrieve cached backup from local storage
+    const cacheStr = localStorage.getItem(`jadsans_auto_backup_${activeEmail}`);
+    if (!cacheStr) return;
+
+    try {
+      const cachedData = JSON.parse(cacheStr);
+      if (cachedData && (cachedData.bookings?.length > 0 || cachedData.students?.length > 0)) {
+        console.log('[Auto-Restore] Ephemeral wipe detected. Silently restoring from browser cache for:', activeEmail);
+        
+        const res = await apiFetch('/api/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cachedData)
+        });
+
+        if (res.ok) {
+          console.log('[Auto-Restore] Silent restore successful!');
+          // Re-fetch everything
+          await fetchBookings();
+          await fetchStudents();
+          await fetchCategories();
+        }
+      }
+    } catch (err) {
+      console.error('[Auto-Restore] Failed to parse or restore from cache:', err);
+    }
+  };
+
+  // Auto-backup caching hook scoped per teacher account
+  useEffect(() => {
+    const activeEmail = user?.email;
+    if (activeEmail && !user.isDemo && (bookings.length > 0 || students.length > 0)) {
+      const backupData = {
+        bookings,
+        students,
+        categories
+      };
+      localStorage.setItem(`jadsans_auto_backup_${activeEmail}`, JSON.stringify(backupData));
+    }
+  }, [bookings, students, categories, user]);
 
   // Fetch bookings initially and whenever views swap, syncing auth status
   useEffect(() => {
     const syncAuthAndFetch = async () => {
+      let isAuthed = false;
       try {
         if (user?.isDemo) {
           fetchBookings();
@@ -194,6 +257,7 @@ export default function App() {
           const data = await response.json();
           if (data.authenticated) {
             setUser(data.user);
+            isAuthed = true;
           } else {
             setUser(null);
           }
@@ -202,12 +266,17 @@ export default function App() {
       } catch (err) {
         console.error('Error syncing auth status:', err);
       }
-      fetchBookings();
-      fetchStudents();
-      fetchCategories();
+      
+      const bData = await fetchBookings();
+      const sData = await fetchStudents();
+      const cData = await fetchCategories();
+
+      if (isAuthed && bData && sData) {
+        await checkAndAutoRestore(bData, sData, cData);
+      }
     };
     syncAuthAndFetch();
-  }, [activeView, user?.isDemo]);
+  }, [activeView, user?.isDemo, user?.email]);
 
 
   const handleLogin = () => {

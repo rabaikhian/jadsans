@@ -21,7 +21,7 @@ initFile(bookingsPath, []);
 initFile(tokensPath, {});
 initFile(studentsPath, []);
 initFile(topicsPath, ["Math: Fractions", "Math: Algebra", "English: Grammar", "Science: Forces"]);
-initFile(categoriesPath, ["งานสอน", "งานประชุม", "งานประกัน", "งานนัดลูกค้า"]);
+initFile(categoriesPath, ["งานสอน"]);
 
 // Helper to read/write JSON files atomically
 const readJSON = (filePath) => {

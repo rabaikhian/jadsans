@@ -644,7 +644,7 @@ export default function MasterView({ bookings, students = [], categories = [], o
       'งานนัดลูกค้า': '#f43f5e'
     };
 
-    const baseList = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
+    const baseList = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
     
     // Union with any category present in students or bookings
     const studentCats = students.map(s => s.category).filter(Boolean);
