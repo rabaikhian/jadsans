@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar as CalendarIcon, CalendarDays, Filter, Clock, Edit, Trash2, X, AlertCircle, Tag, ChevronDown, Lock, Share2, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, CalendarDays, Filter, Clock, Edit, Trash2, X, AlertCircle, Tag, ChevronDown, Lock, Share2, Check, Database, Download, Upload } from 'lucide-react';
 import { apiFetch } from '../api';
 
 const getLocalDateString = (d = new Date()) => {
@@ -519,6 +519,89 @@ export default function MasterView({ bookings, students = [], categories = [], o
   const [modalDateStr, setModalDateStr] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupStatus, setBackupStatus] = useState({ type: '', message: '' });
+  const [backupLoading, setBackupLoading] = useState(false);
+
+  const handleDownloadBackup = async () => {
+    try {
+      setBackupLoading(true);
+      setBackupStatus({ type: '', message: '' });
+      const res = await apiFetch('/api/backup');
+      if (!res.ok) throw new Error('Failed to generate backup');
+      const data = await res.json();
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date();
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      a.href = url;
+      a.download = `jadsans_backup_${y}_${m}_${d}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setBackupStatus({ type: 'success', message: 'ดาวน์โหลดไฟล์สำรองข้อมูลสำเร็จ!' });
+    } catch (err) {
+      console.error(err);
+      setBackupStatus({ type: 'error', message: 'เกิดข้อผิดพลาดในการดาวน์โหลดข้อมูลสำรอง' });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset status
+    setBackupStatus({ type: '', message: '' });
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        setBackupLoading(true);
+        setBackupStatus({ type: 'info', message: 'กำลังกู้คืนข้อมูล...' });
+        const data = JSON.parse(evt.target.result);
+        
+        if (!data || (!data.bookings && !data.students && !data.categories)) {
+          throw new Error('รูปแบบไฟล์สำรองข้อมูลไม่ถูกต้อง');
+        }
+
+        const res = await apiFetch('/api/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          setBackupStatus({ 
+            type: 'success', 
+            message: `กู้คืนข้อมูลสำเร็จ! (ตารางเรียน: ${result.bookingsCount}, นักเรียน: ${result.studentsCount}, หมวดหมู่: ${result.categoriesCount})` 
+          });
+          if (onStudentsChanged) await onStudentsChanged();
+          if (onBookingsChanged) await onBookingsChanged();
+          if (onCategoriesChanged) await onCategoriesChanged();
+        } else {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to restore backup');
+        }
+      } catch (err) {
+        console.error(err);
+        setBackupStatus({ type: 'error', message: err.message || 'เกิดข้อผิดพลาดในการกู้คืนข้อมูลสำรอง' });
+      } finally {
+        setBackupLoading(false);
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input value so same file can be selected again
+    e.target.value = '';
+  };
   
   // Modal states for details/editing
   const [activeDetailBooking, setActiveDetailBooking] = useState(null);
@@ -840,15 +923,30 @@ export default function MasterView({ bookings, students = [], categories = [], o
           
           <div className="calendar-nav-buttons" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isUserLoggedIn && (
-              <button
-                className="nav-arrow-btn"
-                onClick={() => setShowShareModal(true)}
-                title="Share Calendar"
-                style={{ width: 'auto', padding: '0 12px', gap: '6px', color: 'var(--primary-light)', borderColor: 'rgba(16, 185, 129, 0.2)' }}
-              >
-                <Share2 size={15} />
-                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Share</span>
-              </button>
+              <>
+                <button
+                  className="nav-arrow-btn"
+                  onClick={() => {
+                    setBackupStatus({ type: '', message: '' });
+                    setShowBackupModal(true);
+                  }}
+                  title="Backup & Restore Data"
+                  style={{ width: 'auto', padding: '0 12px', gap: '6px', color: 'var(--secondary-light)', borderColor: 'rgba(99, 102, 241, 0.2)' }}
+                >
+                  <Database size={15} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Backup</span>
+                </button>
+
+                <button
+                  className="nav-arrow-btn"
+                  onClick={() => setShowShareModal(true)}
+                  title="Share Calendar"
+                  style={{ width: 'auto', padding: '0 12px', gap: '6px', color: 'var(--primary-light)', borderColor: 'rgba(16, 185, 129, 0.2)' }}
+                >
+                  <Share2 size={15} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Share</span>
+                </button>
+              </>
             )}
             <button className="nav-arrow-btn" onClick={() => navigateMonth(-1)} title="Previous Month">&lt;</button>
             <button className="nav-arrow-btn" onClick={() => navigateMonth(1)} title="Next Month">&gt;</button>
@@ -1548,6 +1646,139 @@ export default function MasterView({ bookings, students = [], categories = [], o
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Backup & Restore Modal ── */}
+      {showBackupModal && createPortal(
+        <div 
+          className="modal-overlay" 
+          onClick={() => setShowBackupModal(false)} 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+        >
+          <div 
+            className="modal-content" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              background: '#ffffff', 
+              border: '1px solid #e2e8f0', 
+              borderRadius: '24px', 
+              padding: '28px', 
+              width: '450px', 
+              maxWidth: '90%', 
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Database size={24} color="var(--primary-light)" />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>สำรองและกู้คืนข้อมูล</h2>
+              </div>
+              <button 
+                onClick={() => setShowBackupModal(false)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.85rem', color: '#475569' }}>
+              {/* Export Backup Section */}
+              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#0f172a', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Download size={16} /> 1. สำรองข้อมูล (Backup)
+                </h3>
+                <p style={{ margin: '0 0 12px 0', lineHeight: '1.4' }}>
+                  ดาวน์โหลดข้อมูลตารางงานนัดหมาย รายชื่อนักเรียน และหมวดหมู่ทั้งหมดเก็บไว้เป็นไฟล์บนคอมพิวเตอร์ของคุณ
+                </p>
+                <button
+                  onClick={handleDownloadBackup}
+                  disabled={backupLoading}
+                  style={{
+                    width: '100%',
+                    background: 'var(--gradient-emerald)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+                    opacity: backupLoading ? 0.7 : 1
+                  }}
+                >
+                  <Download size={16} />
+                  ดาวน์โหลดไฟล์สำรองข้อมูล
+                </button>
+              </div>
+
+              {/* Import Restore Section */}
+              <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#0f172a', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Upload size={16} /> 2. กู้คืนข้อมูล (Restore)
+                </h3>
+                <p style={{ margin: '0 0 12px 0', lineHeight: '1.4' }}>
+                  เลือกไฟล์สำรองข้อมูล `.json` ที่คุณดาวน์โหลดเก็บไว้ เพื่อนำคิวนัดหมายและนักเรียนทั้งหมดกลับคืนเข้าระบบ
+                </p>
+                
+                <label
+                  style={{
+                    width: '100%',
+                    background: '#ffffff',
+                    color: 'var(--secondary-light)',
+                    border: '1.5px dashed rgba(99, 102, 241, 0.4)',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxSizing: 'border-box',
+                    textAlign: 'center',
+                    pointerEvents: backupLoading ? 'none' : 'auto',
+                    opacity: backupLoading ? 0.7 : 1
+                  }}
+                >
+                  <Upload size={16} />
+                  เลือกไฟล์สำรองเพื่อกู้คืน
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleRestoreBackup}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Status alerts */}
+            {backupStatus.message && (
+              <div 
+                style={{ 
+                  padding: '10px 14px', 
+                  borderRadius: '10px', 
+                  fontSize: '0.8rem', 
+                  fontWeight: '600',
+                  background: backupStatus.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : backupStatus.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                  color: backupStatus.type === 'success' ? '#10b981' : backupStatus.type === 'error' ? '#ef4444' : '#6366f1',
+                  border: `1px solid ${backupStatus.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : backupStatus.type === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(99, 102, 241, 0.2)'}`,
+                  lineHeight: '1.4'
+                }}
+              >
+                {backupStatus.message}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Share Calendar Modal ── */}

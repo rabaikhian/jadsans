@@ -703,6 +703,37 @@ app.delete('/api/categories/:name', (req, res) => {
   }
 });
 
+app.get('/api/backup', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Unauthorized: Please log in first' });
+  }
+  try {
+    const data = {
+      bookings: dbService.getAllBookings(),
+      students: dbService.getAllStudents(),
+      topics: dbService.getAllTopics(),
+      categories: dbService.getAllCategories()
+    };
+    res.json(data);
+  } catch (error) {
+    console.error('Error generating backup:', error);
+    res.status(500).json({ error: 'Server error generating backup' });
+  }
+});
+
+app.post('/api/restore', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Unauthorized: Please log in first' });
+  }
+  try {
+    const result = dbService.restoreBackup(req.body);
+    res.json(result);
+  } catch (error) {
+    console.error('Error restoring backup:', error);
+    res.status(500).json({ error: 'Server error restoring backup' });
+  }
+});
+
 // --- Topics API ---
 app.get('/api/topics', (req, res) => {
   try {

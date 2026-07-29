@@ -344,5 +344,32 @@ export const dbService = {
     writeJSON(topicsPath, topics);
     console.log(`[DB] Updated topic from "${oldName}" to "${newName}"`);
     return newName.trim();
+  },
+
+  restoreBackup(data) {
+    if (!data) throw new Error('No data provided');
+    const { bookings, students, topics, categories } = data;
+    
+    if (Array.isArray(bookings)) {
+      writeJSON(bookingsPath, bookings);
+    }
+    if (Array.isArray(students)) {
+      writeJSON(studentsPath, students);
+    }
+    if (Array.isArray(topics)) {
+      writeJSON(topicsPath, topics);
+    }
+    if (Array.isArray(categories)) {
+      writeJSON(categoriesPath, categories);
+    }
+    
+    console.log(`[DB] Restored backup: ${bookings?.length || 0} bookings, ${students?.length || 0} students, ${topics?.length || 0} topics, ${categories?.length || 0} categories`);
+    return {
+      success: true,
+      bookingsCount: bookings?.length || 0,
+      studentsCount: students?.length || 0,
+      topicsCount: topics?.length || 0,
+      categoriesCount: categories?.length || 0
+    };
   }
 };

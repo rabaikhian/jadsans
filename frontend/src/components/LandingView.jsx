@@ -242,9 +242,35 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button 
+            onClick={onTeacherPortal}
+            style={{
+              background: 'transparent',
+              color: '#475569',
+              border: '1.5px solid #cbd5e1',
+              padding: '9px 18px',
+              borderRadius: '12px',
+              fontSize: '0.85rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#f1f5f9';
+              e.currentTarget.style.color = '#0f172a';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#475569';
+            }}
+          >
+            เข้าสู่ระบบ (Login)
+          </button>
 
-          
           <button 
             onClick={onViewSchedule}
             className="action-btn"
@@ -272,7 +298,7 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
               e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.2)';
             }}
           >
-            Browse Schedule
+            ดูตัวอย่างเว็บไซต์
             <ArrowRight size={14} />
           </button>
         </div>
@@ -375,7 +401,7 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
               e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(16, 185, 129, 0.3), 0 8px 10px -6px rgba(16, 185, 129, 0.3)';
             }}
           >
-            View Calendar Grid
+            ดูตัวอย่างเว็บไซต์
             <ArrowRight size={18} />
           </button>
 
