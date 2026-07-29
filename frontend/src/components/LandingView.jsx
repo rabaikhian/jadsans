@@ -268,7 +268,7 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
               e.currentTarget.style.color = '#475569';
             }}
           >
-            เข้าสู่ระบบ (Login)
+            Login
           </button>
 
           <button 
@@ -298,7 +298,7 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
               e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.2)';
             }}
           >
-            ดูตัวอย่างเว็บไซต์
+            Browse Demo
             <ArrowRight size={14} />
           </button>
         </div>
@@ -401,7 +401,7 @@ export default function LandingView({ onViewSchedule, onTeacherPortal }) {
               e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(16, 185, 129, 0.3), 0 8px 10px -6px rgba(16, 185, 129, 0.3)';
             }}
           >
-            ดูตัวอย่างเว็บไซต์
+            Browse Demo
             <ArrowRight size={18} />
           </button>
 
