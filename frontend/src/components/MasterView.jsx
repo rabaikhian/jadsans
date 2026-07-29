@@ -504,7 +504,7 @@ function RoundedDropdown({ value, onChange, options, style = {}, buttonStyle = {
   );
 }
 
-export default function MasterView({ bookings, students = [], onStudentsChanged, loading, user, onBookingsChanged }) {
+export default function MasterView({ bookings, students = [], categories = [], onStudentsChanged, onCategoriesChanged, loading, user, onBookingsChanged }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStudentFilter, setSelectedStudentFilter] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(null);
@@ -554,7 +554,7 @@ export default function MasterView({ bookings, students = [], onStudentsChanged,
       'งานนัดลูกค้า': '#f43f5e'
     };
 
-    const baseList = categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
+    const baseList = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
     
     // Union with any category present in students or bookings
     const studentCats = students.map(s => s.category).filter(Boolean);
