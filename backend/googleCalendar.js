@@ -112,9 +112,9 @@ export const googleCalendarService = {
   // Helper to format booking as Google Calendar event resource
   _formatEvent(booking) {
     // start_time: "HH:MM", date: "YYYY-MM-DD"
-    // Google Calendar requires ISO string
-    const startDateTime = new Date(`${booking.date}T${booking.start_time}:00`);
-    const endDateTime = new Date(`${booking.date}T${booking.end_time}:00`);
+    // Google Calendar accepts RFC3339 with timezone offset (like +07:00 for Thailand)
+    const startISO = `${booking.date}T${booking.start_time}:00+07:00`;
+    const endISO = `${booking.date}T${booking.end_time}:00+07:00`;
 
     const eventLocation = booking.class_type === 'Online'
       ? 'Online (Zoom / Meet)'
@@ -125,11 +125,11 @@ export const googleCalendarService = {
       location: eventLocation,
       description: `Student: ${booking.student_name}\nClass Type: ${booking.class_type || 'Onsite'}\nNotes: ${booking.notes || ''}\nCreated via Student Scheduling Web Application`,
       start: {
-        dateTime: startDateTime.toISOString(),
-        timeZone: 'Asia/Bangkok' // Standard zone as metadata shows local is +07:00
+        dateTime: startISO,
+        timeZone: 'Asia/Bangkok'
       },
       end: {
-        dateTime: endDateTime.toISOString(),
+        dateTime: endISO,
         timeZone: 'Asia/Bangkok'
       },
       reminders: {
