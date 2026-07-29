@@ -1,0 +1,26 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Local database files (avoid pushing user data and credentials to GitHub)
+backend/bookings.json
+backend/tokens.json
+backend/students.json
+backend/topics.json
+
+# Local Environment Variables
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Frontend Build output
+frontend/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
