@@ -546,28 +546,33 @@ export default function MasterView({ bookings, students = [], onStudentsChanged,
   const uniqueStudents = Array.from(new Set(bookings.map(b => b.student_name))).sort();
 
   const getDynamicCategories = () => {
-    const defaults = [
-      { name: 'งานสอน', color: '#10b981' },
-      { name: 'งานประชุม', color: '#f59e0b' },
-      { name: 'งานประกัน', color: '#0ea5e9' },
-      { name: 'งานนัดลูกค้า', color: '#f43f5e' }
-    ];
-    const defaultNames = defaults.map(d => d.name);
+    // Basic defaults with colors
+    const defaultColorMap = {
+      'งานสอน': '#10b981',
+      'งานประชุม': '#f59e0b',
+      'งานประกัน': '#0ea5e9',
+      'งานนัดลูกค้า': '#f43f5e'
+    };
+
+    const baseList = categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
     
-    const customNames = Array.from(new Set([
-      ...students.map(s => s.category).filter(Boolean),
-      ...bookings.map(b => b.class_name).filter(Boolean)
-    ])).filter(name => !defaultNames.includes(name));
+    // Union with any category present in students or bookings
+    const studentCats = students.map(s => s.category).filter(Boolean);
+    const bookingCats = bookings.map(b => b.class_name).filter(Boolean);
+    const allNames = Array.from(new Set([...baseList, ...studentCats, ...bookingCats]));
 
-    const customCats = customNames.map((name, index) => {
-      const colors = ['#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#a855f7'];
-      return {
-        name,
-        color: colors[index % colors.length]
-      };
+    // Generate color-coded category objects
+    const customColors = ['#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#a855f7'];
+    let customColorIndex = 0;
+
+    return allNames.map(name => {
+      if (defaultColorMap[name]) {
+        return { name, color: defaultColorMap[name] };
+      }
+      const color = customColors[customColorIndex % customColors.length];
+      customColorIndex++;
+      return { name, color };
     });
-
-    return [...defaults, ...customCats];
   };
   const dynamicCategories = getDynamicCategories();
 
@@ -1103,6 +1108,7 @@ export default function MasterView({ bookings, students = [], onStudentsChanged,
                             if (res.ok) {
                               if (onStudentsChanged) await onStudentsChanged();
                               if (onBookingsChanged) await onBookingsChanged();
+                              if (onCategoriesChanged) await onCategoriesChanged();
                               setEditClassName(newName.trim());
                             } else {
                               alert('ไม่สามารถแก้ไขชื่อหมวดหมู่ได้');
@@ -1119,6 +1125,7 @@ export default function MasterView({ bookings, students = [], onStudentsChanged,
                             if (res.ok) {
                               if (onStudentsChanged) await onStudentsChanged();
                               if (onBookingsChanged) await onBookingsChanged();
+                              if (onCategoriesChanged) await onCategoriesChanged();
                               setEditClassName('งานสอน');
                               setEditStudentName('');
                             } else {

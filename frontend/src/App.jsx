@@ -49,6 +49,7 @@ export default function App() {
   const [isMockMode, setIsMockMode] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [students, setStudents] = useState([]);
+  const [categories, setCategories] = useState(['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า']);
   const [authLoading, setAuthLoading] = useState(true);
   const [bookingsLoading, setBookingsLoading] = useState(false);
 
@@ -70,8 +71,25 @@ export default function App() {
     }
   };
 
+  const fetchCategories = async () => {
+    if (user?.isDemo) {
+      setCategories(['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า']);
+      return;
+    }
+    try {
+      const response = await apiFetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  };
+
   useEffect(() => {
     fetchStudents();
+    fetchCategories();
   }, []);
 
   // Listen to browser popstate (back/forward navigation)
@@ -168,6 +186,7 @@ export default function App() {
         if (user?.isDemo) {
           fetchBookings();
           fetchStudents();
+          fetchCategories();
           return;
         }
         const response = await apiFetch('/auth/status');
@@ -185,6 +204,7 @@ export default function App() {
       }
       fetchBookings();
       fetchStudents();
+      fetchCategories();
     };
     syncAuthAndFetch();
   }, [activeView, user?.isDemo]);
@@ -368,7 +388,9 @@ export default function App() {
           <MasterView 
             bookings={bookings} 
             students={students}
+            categories={categories}
             onStudentsChanged={fetchStudents}
+            onCategoriesChanged={fetchCategories}
             loading={bookingsLoading}
             user={effectiveUser}
             onBookingsChanged={fetchBookings}
@@ -377,14 +399,18 @@ export default function App() {
           <TodayTasksView 
             bookings={bookings} 
             students={students}
+            categories={categories}
             onBookingCreated={fetchBookings} 
+            onCategoriesChanged={fetchCategories}
             user={effectiveUser}
           />
         ) : activeView === 'booking' ? (
           <BookingView 
             bookings={bookings} 
             students={students}
+            categories={categories}
             onStudentsChanged={fetchStudents}
+            onCategoriesChanged={fetchCategories}
             user={effectiveUser}
             onBookingCreated={fetchBookings} 
             onLoginRequested={handleLogin}
@@ -393,7 +419,9 @@ export default function App() {
           <StudentProfilesView 
             students={students}
             bookings={bookings}
+            categories={categories}
             onStudentsChanged={fetchStudents}
+            onCategoriesChanged={fetchCategories}
             user={effectiveUser}
           />
         )}

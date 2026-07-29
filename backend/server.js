@@ -645,6 +645,30 @@ app.put('/api/students/:id', (req, res) => {
   }
 });
 
+app.get('/api/categories', (req, res) => {
+  try {
+    const categories = dbService.getAllCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error retrieving categories:', error);
+    res.status(500).json({ error: 'Server error retrieving categories' });
+  }
+});
+
+app.post('/api/categories', (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Category name is required' });
+  }
+  try {
+    const created = dbService.createCategory(name);
+    res.json({ name: created });
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ error: 'Server error creating category' });
+  }
+});
+
 app.put('/api/categories/:oldName', (req, res) => {
   const { oldName } = req.params;
   const { newName } = req.body;

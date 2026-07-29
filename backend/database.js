@@ -7,6 +7,7 @@ const bookingsPath = path.resolve(__dirname, 'bookings.json');
 const tokensPath = path.resolve(__dirname, 'tokens.json');
 const studentsPath = path.resolve(__dirname, 'students.json');
 const topicsPath = path.resolve(__dirname, 'topics.json');
+const categoriesPath = path.resolve(__dirname, 'categories.json');
 
 // Initialize database files if they do not exist
 const initFile = (filePath, initialData) => {
@@ -20,6 +21,7 @@ initFile(bookingsPath, []);
 initFile(tokensPath, {});
 initFile(studentsPath, []);
 initFile(topicsPath, ["Math: Fractions", "Math: Algebra", "English: Grammar", "Science: Forces"]);
+initFile(categoriesPath, ["งานสอน", "งานประชุม", "งานประกัน", "งานนัดลูกค้า"]);
 
 // Helper to read/write JSON files atomically
 const readJSON = (filePath) => {
@@ -231,7 +233,30 @@ export const dbService = {
     return students[index];
   },
 
+  getAllCategories() {
+    return readJSON(categoriesPath);
+  },
+
+  createCategory(name) {
+    const categories = readJSON(categoriesPath);
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    if (categories.includes(trimmed)) return trimmed;
+    categories.push(trimmed);
+    writeJSON(categoriesPath, categories);
+    console.log(`[DB] Created category: ${trimmed}`);
+    return trimmed;
+  },
+
   updateCategory(oldName, newName) {
+    // Update in categories.json
+    const categories = readJSON(categoriesPath);
+    const catIndex = categories.indexOf(oldName);
+    if (catIndex !== -1) {
+      categories[catIndex] = newName;
+      writeJSON(categoriesPath, categories);
+    }
+
     const students = readJSON(studentsPath);
     let studentsUpdated = 0;
     const updatedStudents = students.map(s => {
@@ -263,6 +288,11 @@ export const dbService = {
   },
 
   deleteCategory(name) {
+    // Delete from categories.json
+    const categories = readJSON(categoriesPath);
+    const filteredCategories = categories.filter(c => c !== name);
+    writeJSON(categoriesPath, filteredCategories);
+
     const students = readJSON(studentsPath);
     const filteredStudents = students.filter(s => (s.category || 'งานสอน') !== name);
     const studentsDeleted = students.length - filteredStudents.length;

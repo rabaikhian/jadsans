@@ -218,9 +218,9 @@ const getCategoryHeaderStyle = (cat) => {
   }
 };
 
-export default function TodayTasksView({ bookings = [], students = [], onBookingCreated }) {
+export default function TodayTasksView({ bookings = [], students = [], categories = [], onBookingCreated, onCategoriesChanged }) {
   const getDynamicCategories = () => {
-    const defaults = ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
+    const defaults = categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
     const bookingCats = bookings.map(b => b.class_name).filter(Boolean);
     return Array.from(new Set([...defaults, ...bookingCats]));
   };

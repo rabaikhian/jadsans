@@ -418,7 +418,7 @@ const getStatusColors = (b) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function BookingView({ bookings = [], students = [], onStudentsChanged, user, onBookingCreated, onLoginRequested }) {
+export default function BookingView({ bookings = [], students = [], categories = [], onStudentsChanged, onCategoriesChanged, user, onBookingCreated, onLoginRequested }) {
 
   // Calendar navigation
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -450,6 +450,8 @@ export default function BookingView({ bookings = [], students = [], onStudentsCh
   const [customCategoryInput, setCustomCategoryInput] = useState('');
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
 
+  const newStudentInputRef = useRef(null);
+
   useEffect(() => {
     if (showAddStudentModal) {
       setModalCategory(className);
@@ -462,7 +464,7 @@ export default function BookingView({ bookings = [], students = [], onStudentsCh
   const month = currentDate.getMonth();
 
   const getDynamicCategories = () => {
-    const defaults = ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
+    const defaults = categories.length > 0 ? categories : ['งานสอน', 'งานประชุม', 'งานประกัน', 'งานนัดลูกค้า'];
     const studentCats = students.map(s => s.category).filter(Boolean);
     const bookingCats = bookings.map(b => b.class_name).filter(Boolean);
     return Array.from(new Set([...defaults, ...studentCats, ...bookingCats]));
@@ -764,6 +766,7 @@ export default function BookingView({ bookings = [], students = [], onStudentsCh
                       if (res.ok) {
                         if (onStudentsChanged) await onStudentsChanged();
                         if (onBookingCreated) await onBookingCreated();
+                        if (onCategoriesChanged) await onCategoriesChanged();
                         setClassName(newName.trim());
                       } else {
                         alert('ไม่สามารถแก้ไขชื่อหมวดหมู่ได้');
@@ -780,6 +783,7 @@ export default function BookingView({ bookings = [], students = [], onStudentsCh
                       if (res.ok) {
                         if (onStudentsChanged) await onStudentsChanged();
                         if (onBookingCreated) await onBookingCreated();
+                        if (onCategoriesChanged) await onCategoriesChanged();
                         setClassName('งานสอน');
                         setStudentName('');
                       } else {
