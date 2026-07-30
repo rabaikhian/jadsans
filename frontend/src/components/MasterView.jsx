@@ -1146,17 +1146,12 @@ export default function MasterView({ bookings, students = [], categories = [], o
                 placeholder="-- ทั้งหมด --"
                 options={[
                   { value: null, label: '-- ทั้งหมด --' },
-                  ...Array.from(new Set(
-                    bookings
-                      .filter(b => {
-                        if (!b.date) return false;
-                        const [bYear, bMonth] = b.date.split('-');
-                        return parseInt(bYear, 10) === year && parseInt(bMonth, 10) === (month + 1);
-                      })
-                      .filter(b => !selectedCategoryFilter || b.class_name === selectedCategoryFilter)
-                      .map(b => b.student_name)
-                  ))
+                  ...Array.from(new Set([
+                    ...students.filter(s => !selectedCategoryFilter || (s.category || 'งานสอน') === selectedCategoryFilter).map(s => s.name),
+                    ...bookings.filter(b => !selectedCategoryFilter || b.class_name === selectedCategoryFilter).map(b => b.student_name)
+                  ]))
                     .filter(Boolean)
+                    .sort()
                     .map(name => ({ value: name, label: name }))
                 ]}
               />
