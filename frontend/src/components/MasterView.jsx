@@ -1104,21 +1104,12 @@ export default function MasterView({ bookings, students = [], categories = [], o
               >
                 <span>Show All Categories</span>
                 <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-                  ({bookings.filter(b => {
-                    if (!b.date) return false;
-                    const [bYear, bMonth] = b.date.split('-');
-                    return parseInt(bYear, 10) === year && parseInt(bMonth, 10) === (month + 1);
-                  }).length})
+                  ({students.length})
                 </span>
               </button>
 
               {dynamicCategories.map(cat => {
-                const count = bookings.filter(b => {
-                  if (b.class_name !== cat.name) return false;
-                  if (!b.date) return false;
-                  const [bYear, bMonth] = b.date.split('-');
-                  return parseInt(bYear, 10) === year && parseInt(bMonth, 10) === (month + 1);
-                }).length;
+                const count = students.filter(s => (s.category || 'งานสอน') === cat.name).length;
                 const isActive = selectedCategoryFilter === cat.name;
 
                 return (
