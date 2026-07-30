@@ -8,6 +8,7 @@ const tokensPath = path.resolve(__dirname, 'tokens.json');
 const studentsPath = path.resolve(__dirname, 'students.json');
 const topicsPath = path.resolve(__dirname, 'topics.json');
 const categoriesPath = path.resolve(__dirname, 'categories.json');
+const sessionsPath = path.resolve(__dirname, 'sessions.json');
 
 // Initialize database files if they do not exist
 const initFile = (filePath, initialData) => {
@@ -22,6 +23,7 @@ initFile(tokensPath, {});
 initFile(studentsPath, []);
 initFile(topicsPath, ["Math: Fractions", "Math: Algebra", "English: Grammar", "Science: Forces"]);
 initFile(categoriesPath, ["งานสอน"]);
+initFile(sessionsPath, {});
 
 // Helper to read/write JSON files atomically
 const readJSON = (filePath) => {
@@ -371,5 +373,38 @@ export const dbService = {
       topicsCount: topics?.length || 0,
       categoriesCount: categories?.length || 0
     };
+  },
+
+  // --- Token-based Session Management (Safari / Cross-site fix) ---
+  saveSession(token, userProfile) {
+    const sessions = readJSON(sessionsPath) || {};
+    sessions[token] = { user: userProfile, createdAt: Date.now() };
+    writeJSON(sessionsPath, sessions);
+    console.log(`[DB] Session saved for token: ${token.substring(0, 8)}...`);
+  },
+
+  getSession(token) {
+    if (!token) return null;
+    const sessions = readJSON(sessionsPath) || {};
+    const entry = sessions[token];
+    if (!entry) return null;
+    // Expire sessions older than 30 days
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - entry.createdAt > THIRTY_DAYS) {
+      delete sessions[token];
+      writeJSON(sessionsPath, sessions);
+      return null;
+    }
+    return entry.user;
+  },
+
+  deleteSession(token) {
+    if (!token) return;
+    const sessions = readJSON(sessionsPath) || {};
+    if (sessions[token]) {
+      delete sessions[token];
+      writeJSON(sessionsPath, sessions);
+      console.log(`[DB] Session deleted for token: ${token.substring(0, 8)}...`);
+    }
   }
 };

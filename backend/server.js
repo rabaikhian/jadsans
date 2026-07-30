@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { dbService } from './database.js';
 import { googleCalendarService } from './googleCalendar.js';
 
@@ -38,6 +39,25 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// --- Token-based Session Fallback (Safari / Cross-site ITP fix) ---
+// Reads Authorization: Bearer <token> or x-session-token header and
+// hydrates req.session.user from the persistent sessions.json DB.
+app.use((req, res, next) => {
+  if (!req.session.user) {
+    const authHeader = req.headers['authorization'] || '';
+    const headerToken = req.headers['x-session-token'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : headerToken;
+    if (token) {
+      const user = dbService.getSession(token);
+      if (user) {
+        req.session.user = user;
+        req.tokenAuth = token; // remember which token was used
+      }
+    }
+  }
+  next();
+});
 
 // --- Request Logging ---
 app.use((req, res, next) => {
@@ -233,12 +253,16 @@ app.get('/auth/google/callback', async (req, res) => {
 
   try {
     const userProfile = await googleCalendarService.handleAuthCallback(code);
-    req.session.user = {
+    const sessionUser = {
       email: userProfile.email,
       name: userProfile.name,
       picture: userProfile.picture
     };
-    res.redirect(FRONTEND_URL);
+    req.session.user = sessionUser;
+    // Generate a persistent token so Safari (no cross-site cookies) can authenticate
+    const token = crypto.randomBytes(32).toString('hex');
+    dbService.saveSession(token, sessionUser);
+    res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
   } catch (error) {
     console.error('OAuth callback failed:', error);
     res.status(500).send(`OAuth Authentication failed: ${error.message}`);
@@ -264,7 +288,10 @@ app.get('/auth/google/mock-callback', async (req, res) => {
       };
     }
     req.session.user = userProfile;
-    res.redirect(FRONTEND_URL);
+    // Generate a persistent token so Safari (no cross-site cookies) can authenticate
+    const token = crypto.randomBytes(32).toString('hex');
+    dbService.saveSession(token, userProfile);
+    res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
   } catch (error) {
     console.error('Mock login failed:', error);
     res.status(500).send('Mock authentication failed.');
@@ -273,6 +300,13 @@ app.get('/auth/google/mock-callback', async (req, res) => {
 
 // Logout endpoint
 app.post('/auth/logout', (req, res) => {
+  // Also delete the persistent token session if it was used
+  const authHeader = req.headers['authorization'] || '';
+  const headerToken = req.headers['x-session-token'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : headerToken;
+  if (token) {
+    dbService.deleteSession(token);
+  }
   req.session.destroy((err) => {
     if (err) {
       console.error('Session destruction error during logout:', err);
@@ -477,24 +511,34 @@ app.put('/api/bookings/:id', async (req, res) => {
     }
 
     let googleEventId = existingBooking.google_event_id;
+    // Use the booking's owner email (works even if cookie session expired)
+    const calendarEmail = existingBooking.user_email || (req.session.user && req.session.user.email);
 
-    // Sync updates to Google Calendar if user session exists
-    if (req.session.user && req.session.user.email) {
-      const email = req.session.user.email;
+    // If status is being set to 'cancelled', delete from Google Calendar
+    if (status === 'cancelled' && googleEventId && calendarEmail) {
+      try {
+        await googleCalendarService.deleteEvent(calendarEmail, googleEventId);
+        console.log(`[GCal] Deleted event ${googleEventId} due to cancellation`);
+        googleEventId = null; // clear so we don't re-create
+      } catch (syncErr) {
+        console.error(`[GCal] Failed to delete event on cancellation:`, syncErr.message);
+      }
+    } else if (status !== 'cancelled' && calendarEmail) {
+      // Sync updates to Google Calendar
       const updatedEventDetails = { class_name, student_name, date, start_time, end_time, notes, color, location, class_type };
 
       if (googleEventId) {
         try {
-          googleEventId = await googleCalendarService.updateEvent(email, googleEventId, updatedEventDetails);
+          googleEventId = await googleCalendarService.updateEvent(calendarEmail, googleEventId, updatedEventDetails);
         } catch (syncErr) {
-          console.error(`Google Calendar sync update failed for EventID ${googleEventId}:`, syncErr.message);
+          console.error(`[GCal] Sync update failed for EventID ${googleEventId}:`, syncErr.message);
         }
       } else {
-        // If event wasn't synced previously, create it now
+        // Event wasn't synced previously — create it now
         try {
-          googleEventId = await googleCalendarService.createEvent(email, updatedEventDetails);
+          googleEventId = await googleCalendarService.createEvent(calendarEmail, updatedEventDetails);
         } catch (syncErr) {
-          console.error('Google Calendar sync creation failed:', syncErr.message);
+          console.error('[GCal] Sync creation failed:', syncErr.message);
         }
       }
     }
@@ -540,13 +584,15 @@ app.delete('/api/bookings/:id', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Try deleting calendar event if user session is active
-    if (booking.google_event_id && req.session.user && req.session.user.email) {
-      const email = req.session.user.email;
+    // Delete from Google Calendar using the booking owner's email (not the active session)
+    // This ensures deletion works even when the cookie session has expired (e.g. Safari ITP)
+    const calendarEmail = booking.user_email || (req.session.user && req.session.user.email);
+    if (booking.google_event_id && calendarEmail) {
       try {
-        await googleCalendarService.deleteEvent(email, booking.google_event_id);
+        await googleCalendarService.deleteEvent(calendarEmail, booking.google_event_id);
+        console.log(`[GCal] Deleted event ${booking.google_event_id} for booking ${id}`);
       } catch (syncErr) {
-        console.error(`Failed to delete Google Calendar Event ID ${booking.google_event_id}:`, syncErr.message);
+        console.error(`[GCal] Failed to delete event ${booking.google_event_id}:`, syncErr.message);
       }
     }
 

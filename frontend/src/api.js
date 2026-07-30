@@ -7,8 +7,16 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
  */
 export function apiFetch(path, options = {}) {
   const url = `${API_BASE}${path}`;
+  const token = localStorage.getItem('auth_token');
+  const headers = {
+    ...(options.headers || {})
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   return fetch(url, {
     ...options,
+    headers,
     credentials: 'include',
   });
 }

@@ -11,6 +11,14 @@ import { apiFetch } from './api';
 
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
+  const tokenParam = urlParams.get('auth_token');
+  if (tokenParam) {
+    localStorage.setItem('auth_token', tokenParam);
+    urlParams.delete('auth_token');
+    const newSearch = urlParams.toString();
+    const cleanSearch = newSearch ? `?${newSearch}` : '';
+    window.history.replaceState({}, '', window.location.pathname + cleanSearch);
+  }
   const isSharedParam = urlParams.get('shared') === 'true';
 
   const [activeView, setActiveView] = useState(() => {
@@ -284,6 +292,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem('auth_token');
     if (user?.isDemo) {
       setUser(null);
       changeView('landing');
