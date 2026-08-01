@@ -33,7 +33,8 @@ app.use(session({
 // CORS Configuration
 app.use(cors({
   origin: FRONTEND_URL,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-session-token'],
   credentials: true // allows sending cookies back and forth
 }));
 
