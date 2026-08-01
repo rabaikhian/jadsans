@@ -176,7 +176,10 @@ function CustomSelect({ value, onChange, options, placeholder, onDeleteOption, o
 
   let displayLabel = placeholder || '-- เลือก --';
   if (selectedValues.length > 0) {
-    displayLabel = selectedValues.join(', ');
+    displayLabel = selectedValues.map(v => {
+      const opt = options.find(o => o.value === v);
+      return opt ? opt.label : v;
+    }).join(', ');
   }
 
   return (
