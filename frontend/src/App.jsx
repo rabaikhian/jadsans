@@ -249,43 +249,26 @@ export default function App() {
     }
   }, [bookings, students, categories, user]);
 
-  // Fetch bookings initially and whenever views swap, syncing auth status
+  // Fetch bookings and students whenever the view swaps or the user changes
   useEffect(() => {
-    const syncAuthAndFetch = async () => {
-      let isAuthed = false;
-      try {
-        if (user?.isDemo) {
-          fetchBookings();
-          fetchStudents();
-          fetchCategories();
-          return;
-        }
-        const response = await apiFetch('/auth/status');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated) {
-            setUser(data.user);
-            isAuthed = true;
-          } else {
-            setUser(null);
-          }
-          setIsMockMode(data.isMockMode);
-        }
-      } catch (err) {
-        console.error('Error syncing auth status:', err);
+    const fetchData = async () => {
+      if (user?.isDemo) {
+        fetchBookings();
+        fetchStudents();
+        fetchCategories();
+        return;
       }
       
       const bData = await fetchBookings();
       const sData = await fetchStudents();
       const cData = await fetchCategories();
 
-      if (isAuthed && bData && sData) {
+      if (user && bData && sData) {
         await checkAndAutoRestore(bData, sData, cData);
       }
     };
-    syncAuthAndFetch();
+    fetchData();
   }, [activeView, user?.isDemo, user?.email]);
-
 
   const handleLogin = () => {
     changeView('login');
