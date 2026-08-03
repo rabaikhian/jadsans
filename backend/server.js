@@ -38,6 +38,12 @@ app.use(cors({
   credentials: true // allows sending cookies back and forth
 }));
 
+// Prevent aggressive caching of API responses (crucial for Safari/macOS/iOS compatibility)
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -380,7 +386,8 @@ app.get('/api/bookings', async (req, res) => {
     const activeEmail = owner || (req.session.user ? req.session.user.email : null);
     
     if (activeEmail) {
-      bookings = bookings.filter(b => (b.user_email || 'mock.student@gmail.com') === activeEmail);
+      // Attribute bookings without a user_email field to the activeEmail so they are not hidden
+      bookings = bookings.filter(b => (b.user_email || activeEmail) === activeEmail);
     } else {
       // Anonymous public visit to root without owner parameter:
       // Default to the first mock account's bookings to keep dashboard populated.
@@ -623,7 +630,8 @@ app.get('/api/students', async (req, res) => {
     const activeEmail = owner || (req.session.user ? req.session.user.email : null);
     
     if (activeEmail) {
-      students = students.filter(s => (s.user_email || 'mock.student@gmail.com') === activeEmail);
+      // Attribute students without a user_email field to the activeEmail so they are not hidden
+      students = students.filter(s => (s.user_email || activeEmail) === activeEmail);
     } else {
       students = students.filter(s => (s.user_email || 'mock.student@gmail.com') === 'mock.student@gmail.com');
     }
@@ -780,7 +788,26 @@ app.post('/api/restore', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized: Please log in first' });
   }
   try {
-    const result = await dbService.restoreBackup(req.body);
+    const userEmail = req.session.user.email;
+    const data = req.body;
+
+    // Tag all incoming bookings and students with the restoring user's email if they lack one
+    if (data) {
+      if (Array.isArray(data.bookings)) {
+        data.bookings = data.bookings.map(b => ({
+          ...b,
+          user_email: b.user_email || userEmail
+        }));
+      }
+      if (Array.isArray(data.students)) {
+        data.students = data.students.map(s => ({
+          ...s,
+          user_email: s.user_email || userEmail
+        }));
+      }
+    }
+
+    const result = await dbService.restoreBackup(data);
     res.json(result);
   } catch (error) {
     console.error('Error restoring backup:', error);
