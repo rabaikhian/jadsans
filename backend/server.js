@@ -44,16 +44,20 @@ app.use(express.urlencoded({ extended: true }));
 // --- Token-based Session Fallback (Safari / Cross-site ITP fix) ---
 // Reads Authorization: Bearer <token> or x-session-token header and
 // hydrates req.session.user from the persistent sessions.json DB.
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   if (!req.session.user) {
     const authHeader = req.headers['authorization'] || '';
     const headerToken = req.headers['x-session-token'] || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : headerToken;
     if (token) {
-      const user = dbService.getSession(token);
-      if (user) {
-        req.session.user = user;
-        req.tokenAuth = token; // remember which token was used
+      try {
+        const user = await dbService.getSession(token);
+        if (user) {
+          req.session.user = user;
+          req.tokenAuth = token; // remember which token was used
+        }
+      } catch (err) {
+        console.error('Session hydration error:', err);
       }
     }
   }
@@ -262,7 +266,7 @@ app.get('/auth/google/callback', async (req, res) => {
     req.session.user = sessionUser;
     // Generate a persistent token so Safari (no cross-site cookies) can authenticate
     const token = crypto.randomBytes(32).toString('hex');
-    dbService.saveSession(token, sessionUser);
+    await dbService.saveSession(token, sessionUser);
     res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
   } catch (error) {
     console.error('OAuth callback failed:', error);
@@ -291,7 +295,7 @@ app.get('/auth/google/mock-callback', async (req, res) => {
     req.session.user = userProfile;
     // Generate a persistent token so Safari (no cross-site cookies) can authenticate
     const token = crypto.randomBytes(32).toString('hex');
-    dbService.saveSession(token, userProfile);
+    await dbService.saveSession(token, userProfile);
     res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
   } catch (error) {
     console.error('Mock login failed:', error);
@@ -300,13 +304,13 @@ app.get('/auth/google/mock-callback', async (req, res) => {
 });
 
 // Logout endpoint
-app.post('/auth/logout', (req, res) => {
+app.post('/auth/logout', async (req, res) => {
   // Also delete the persistent token session if it was used
   const authHeader = req.headers['authorization'] || '';
   const headerToken = req.headers['x-session-token'] || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : headerToken;
   if (token) {
-    dbService.deleteSession(token);
+    await dbService.deleteSession(token);
   }
   req.session.destroy((err) => {
     if (err) {
@@ -367,9 +371,9 @@ const findRecommendedSlots = (date, sameDateBookings, studentName, durationMinut
 };
 
 // Get all bookings (Master calendar list)
-app.get('/api/bookings', (req, res) => {
+app.get('/api/bookings', async (req, res) => {
   try {
-    let bookings = dbService.getAllBookings();
+    let bookings = await dbService.getAllBookings();
     
     // Detect owner filter or session email filter
     const { owner } = req.query;
@@ -403,7 +407,8 @@ app.post('/api/bookings', async (req, res) => {
     const startB = timeToMinutes(start_time);
     const endB = timeToMinutes(end_time);
     const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
-    const sameDateBookings = dbService.getAllBookings().filter(b => 
+    const allBookings = await dbService.getAllBookings();
+    const sameDateBookings = allBookings.filter(b => 
       b.date === date && 
       (b.user_email || 'mock.student@gmail.com') === userEmail
     );
@@ -449,7 +454,7 @@ app.post('/api/bookings', async (req, res) => {
       console.warn('Booking created while not signed in to Google. Local-only save.');
     }
 
-    const newBooking = dbService.createBooking({
+    const newBooking = await dbService.createBooking({
       class_name,
       student_name,
       date,
@@ -480,7 +485,7 @@ app.put('/api/bookings/:id', async (req, res) => {
   }
 
   try {
-    const existingBooking = dbService.getBookingById(id);
+    const existingBooking = await dbService.getBookingById(id);
     if (!existingBooking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
@@ -489,7 +494,8 @@ app.put('/api/bookings/:id', async (req, res) => {
     const startB = timeToMinutes(start_time);
     const endB = timeToMinutes(end_time);
     const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
-    const sameDateBookings = dbService.getAllBookings().filter(b => 
+    const allBookings = await dbService.getAllBookings();
+    const sameDateBookings = allBookings.filter(b => 
       b.date === date && 
       b.id !== Number(id) && 
       (b.user_email || 'mock.student@gmail.com') === userEmail
@@ -554,7 +560,7 @@ app.put('/api/bookings/:id', async (req, res) => {
       finalStatus = existingBooking.status || 'scheduled';
     }
 
-    const updatedBooking = dbService.updateBooking(id, {
+    const updatedBooking = await dbService.updateBooking(id, {
       class_name,
       student_name,
       date,
@@ -580,7 +586,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const booking = dbService.getBookingById(id);
+    const booking = await dbService.getBookingById(id);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
@@ -597,7 +603,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
       }
     }
 
-    const deleted = dbService.deleteBooking(id);
+    const deleted = await dbService.deleteBooking(id);
     if (deleted) {
       res.json({ success: true, message: 'Booking deleted successfully' });
     } else {
@@ -610,9 +616,9 @@ app.delete('/api/bookings/:id', async (req, res) => {
 });
 
 // --- Students API Endpoints ---
-app.get('/api/students', (req, res) => {
+app.get('/api/students', async (req, res) => {
   try {
-    let students = dbService.getAllStudents();
+    let students = await dbService.getAllStudents();
     const { owner } = req.query;
     const activeEmail = owner || (req.session.user ? req.session.user.email : null);
     
@@ -629,7 +635,7 @@ app.get('/api/students', (req, res) => {
   }
 });
 
-app.post('/api/students', (req, res) => {
+app.post('/api/students', async (req, res) => {
   const { name, location, color, category, nickname, grade, enrolled_date, current_course, next_course, report, is_hidden } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Name is required' });
@@ -639,7 +645,8 @@ app.post('/api/students', (req, res) => {
 
   try {
     const userEmail = req.session.user ? req.session.user.email : 'mock.student@gmail.com';
-    const exists = dbService.getAllStudents().some(
+    const allStudents = await dbService.getAllStudents();
+    const exists = allStudents.some(
       s => s.name.toLowerCase() === name.trim().toLowerCase() && 
            (s.category || 'งานสอน') === targetCategory &&
            (s.user_email || 'mock.student@gmail.com') === userEmail
@@ -648,7 +655,7 @@ app.post('/api/students', (req, res) => {
       return res.status(400).json({ error: 'Name already exists in this category' });
     }
 
-    const newStudent = dbService.createStudent({ 
+    const newStudent = await dbService.createStudent({ 
       name: name.trim(), 
       location: location || '', 
       color: color || '',
@@ -669,10 +676,10 @@ app.post('/api/students', (req, res) => {
   }
 });
 
-app.delete('/api/students/:id', (req, res) => {
+app.delete('/api/students/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const deleted = dbService.deleteStudent(id);
+    const deleted = await dbService.deleteStudent(id);
     if (deleted) {
       res.json({ success: true, message: 'Student deleted successfully' });
     } else {
@@ -684,11 +691,11 @@ app.delete('/api/students/:id', (req, res) => {
   }
 });
 
-app.put('/api/students/:id', (req, res) => {
+app.put('/api/students/:id', async (req, res) => {
   const { id } = req.params;
   const { name, location, color, category, nickname, grade, enrolled_date, current_course, next_course, report, is_hidden } = req.body;
   try {
-    const updated = dbService.updateStudent(id, { name, location, color, category, nickname, grade, enrolled_date, current_course, next_course, report, is_hidden });
+    const updated = await dbService.updateStudent(id, { name, location, color, category, nickname, grade, enrolled_date, current_course, next_course, report, is_hidden });
     if (updated) {
       res.json(updated);
     } else {
@@ -700,9 +707,9 @@ app.put('/api/students/:id', (req, res) => {
   }
 });
 
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', async (req, res) => {
   try {
-    const categories = dbService.getAllCategories();
+    const categories = await dbService.getAllCategories();
     res.json(categories);
   } catch (error) {
     console.error('Error retrieving categories:', error);
@@ -710,13 +717,13 @@ app.get('/api/categories', (req, res) => {
   }
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Category name is required' });
   }
   try {
-    const created = dbService.createCategory(name);
+    const created = await dbService.createCategory(name);
     res.json({ name: created });
   } catch (error) {
     console.error('Error creating category:', error);
@@ -724,14 +731,14 @@ app.post('/api/categories', (req, res) => {
   }
 });
 
-app.put('/api/categories/:oldName', (req, res) => {
+app.put('/api/categories/:oldName', async (req, res) => {
   const { oldName } = req.params;
   const { newName } = req.body;
   if (!newName || !newName.trim()) {
     return res.status(400).json({ error: 'New name is required' });
   }
   try {
-    const result = dbService.updateCategory(oldName, newName.trim());
+    const result = await dbService.updateCategory(oldName, newName.trim());
     res.json(result);
   } catch (error) {
     console.error(`Error updating category ${oldName}:`, error);
@@ -739,10 +746,10 @@ app.put('/api/categories/:oldName', (req, res) => {
   }
 });
 
-app.delete('/api/categories/:name', (req, res) => {
+app.delete('/api/categories/:name', async (req, res) => {
   const { name } = req.params;
   try {
-    const result = dbService.deleteCategory(name);
+    const result = await dbService.deleteCategory(name);
     res.json(result);
   } catch (error) {
     console.error(`Error deleting category ${name}:`, error);
@@ -750,16 +757,16 @@ app.delete('/api/categories/:name', (req, res) => {
   }
 });
 
-app.get('/api/backup', (req, res) => {
+app.get('/api/backup', async (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Unauthorized: Please log in first' });
   }
   try {
     const data = {
-      bookings: dbService.getAllBookings(),
-      students: dbService.getAllStudents(),
-      topics: dbService.getAllTopics(),
-      categories: dbService.getAllCategories()
+      bookings: await dbService.getAllBookings(),
+      students: await dbService.getAllStudents(),
+      topics: await dbService.getAllTopics(),
+      categories: await dbService.getAllCategories()
     };
     res.json(data);
   } catch (error) {
@@ -768,12 +775,12 @@ app.get('/api/backup', (req, res) => {
   }
 });
 
-app.post('/api/restore', (req, res) => {
+app.post('/api/restore', async (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Unauthorized: Please log in first' });
   }
   try {
-    const result = dbService.restoreBackup(req.body);
+    const result = await dbService.restoreBackup(req.body);
     res.json(result);
   } catch (error) {
     console.error('Error restoring backup:', error);
@@ -782,9 +789,9 @@ app.post('/api/restore', (req, res) => {
 });
 
 // --- Topics API ---
-app.get('/api/topics', (req, res) => {
+app.get('/api/topics', async (req, res) => {
   try {
-    const topics = dbService.getAllTopics();
+    const topics = await dbService.getAllTopics();
     res.json(topics);
   } catch (error) {
     console.error('Error retrieving topics:', error);
@@ -792,13 +799,13 @@ app.get('/api/topics', (req, res) => {
   }
 });
 
-app.post('/api/topics', (req, res) => {
+app.post('/api/topics', async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Topic name is required' });
   }
   try {
-    const saved = dbService.createTopic(name);
+    const saved = await dbService.createTopic(name);
     res.status(201).json(saved);
   } catch (error) {
     console.error('Error creating topic:', error);
@@ -806,10 +813,10 @@ app.post('/api/topics', (req, res) => {
   }
 });
 
-app.delete('/api/topics/:name', (req, res) => {
+app.delete('/api/topics/:name', async (req, res) => {
   const { name } = req.params;
   try {
-    dbService.deleteTopic(name);
+    await dbService.deleteTopic(name);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting topic:', error);
@@ -817,14 +824,14 @@ app.delete('/api/topics/:name', (req, res) => {
   }
 });
 
-app.put('/api/topics/:oldName', (req, res) => {
+app.put('/api/topics/:oldName', async (req, res) => {
   const { oldName } = req.params;
   const { newName } = req.body;
   if (!newName || !newName.trim()) {
     return res.status(400).json({ error: 'New topic name is required' });
   }
   try {
-    const updated = dbService.updateTopic(oldName, newName.trim());
+    const updated = await dbService.updateTopic(oldName, newName.trim());
     if (updated) {
       res.json(updated);
     } else {

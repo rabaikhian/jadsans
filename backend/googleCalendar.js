@@ -67,7 +67,7 @@ export const googleCalendarService = {
     const picture = userInfo.data.picture || '';
 
     // Save tokens in database for offline/background syncing
-    dbService.saveUserTokens(email, tokens);
+    await dbService.saveUserTokens(email, tokens);
 
     return { email, name, picture, tokens };
   },
@@ -75,7 +75,7 @@ export const googleCalendarService = {
   async getAuthClientForUser(email) {
     if (!hasCredentials) return null;
 
-    const tokens = dbService.getUserTokens(email);
+    const tokens = await dbService.getUserTokens(email);
     if (!tokens) {
       throw new Error(`No OAuth tokens found for user: ${email}`);
     }
@@ -88,9 +88,9 @@ export const googleCalendarService = {
     });
 
     // Handle token refresh events automatically
-    oauth2Client.on('tokens', (newTokens) => {
+    oauth2Client.on('tokens', async (newTokens) => {
       console.log(`Refreshing access token for user: ${email}`);
-      dbService.saveUserTokens(email, newTokens);
+      await dbService.saveUserTokens(email, newTokens);
     });
 
     // Check if token is expired or close to expiring, and refresh it proactively
@@ -99,7 +99,7 @@ export const googleCalendarService = {
       try {
         console.log(`Token is expired or expiring soon. Refreshing manually for: ${email}`);
         const { credentials } = await oauth2Client.refreshAccessToken();
-        dbService.saveUserTokens(email, credentials);
+        await dbService.saveUserTokens(email, credentials);
         oauth2Client.setCredentials(credentials);
       } catch (err) {
         console.error(`Failed to refresh Google OAuth token for user ${email}:`, err.message);

@@ -8,6 +8,8 @@ backend/bookings.json
 backend/tokens.json
 backend/students.json
 backend/topics.json
+backend/categories.json
+backend/sessions.json
 
 # Local Environment Variables
 .env
