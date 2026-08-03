@@ -605,6 +605,54 @@ export default function MasterView({ bookings, students = [], categories = [], o
     // Reset file input value so same file can be selected again
     e.target.value = '';
   };
+
+  const handleRestoreFromBrowserCache = async () => {
+    const activeEmail = user?.email;
+    if (!activeEmail) {
+      setBackupStatus({ type: 'error', message: 'กรุณาเข้าสู่ระบบก่อน' });
+      return;
+    }
+    const cacheStr = localStorage.getItem(`jadsans_auto_backup_${activeEmail}`);
+    if (!cacheStr) {
+      setBackupStatus({ type: 'error', message: 'ไม่พบข้อมูลสำรองในเว็บเบราว์เซอร์นี้' });
+      return;
+    }
+
+    try {
+      setBackupLoading(true);
+      setBackupStatus({ type: 'info', message: 'กำลังกู้คืนข้อมูลจากเบราว์เซอร์...' });
+      const data = JSON.parse(cacheStr);
+      
+      if (!data || (!data.bookings && !data.students && !data.categories)) {
+        throw new Error('รูปแบบข้อมูลสำรองในเบราว์เซอร์ไม่ถูกต้อง');
+      }
+
+      const res = await apiFetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setBackupStatus({ 
+          type: 'success', 
+          message: `กู้คืนข้อมูลสำเร็จ! (ตารางเรียน: ${result.bookingsCount}, นักเรียน: ${result.studentsCount}, หมวดหมู่: ${result.categoriesCount})` 
+        });
+        if (onStudentsChanged) await onStudentsChanged();
+        if (onBookingsChanged) await onBookingsChanged();
+        if (onCategoriesChanged) await onCategoriesChanged();
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to restore backup');
+      }
+    } catch (err) {
+      console.error(err);
+      setBackupStatus({ type: 'error', message: err.message || 'เกิดข้อผิดพลาดในการกู้คืนข้อมูล' });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
   
   // Modal states for details/editing
   const [activeDetailBooking, setActiveDetailBooking] = useState(null);
@@ -1746,6 +1794,41 @@ export default function MasterView({ bookings, students = [], categories = [], o
                   />
                 </label>
               </div>
+
+              {/* Browser Cache Restore Section */}
+              {localStorage.getItem(`jadsans_auto_backup_${user?.email}`) && (
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                  <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#0f172a', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Database size={16} /> 3. กู้คืนจากเบราว์เซอร์ (Auto-Backup)
+                  </h3>
+                  <p style={{ margin: '0 0 12px 0', lineHeight: '1.4' }}>
+                    พบข้อมูลสำรองอัตโนมัติในเบราว์เซอร์นี้ คุณสามารถคลิกเพื่อดึงข้อมูลทั้งหมดเข้าสู่ระบบคลาวด์ได้โดยตรง
+                  </p>
+                  <button
+                    onClick={handleRestoreFromBrowserCache}
+                    disabled={backupLoading}
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.15)',
+                      opacity: backupLoading ? 0.7 : 1
+                    }}
+                  >
+                    <Database size={16} />
+                    ดึงข้อมูลสำรองจากเบราว์เซอร์นี้
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Status alerts */}
