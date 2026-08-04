@@ -196,45 +196,7 @@ export default function App() {
     return null;
   };
 
-  const checkAndAutoRestore = async (fetchedBookings, fetchedStudents, fetchedCategories) => {
-    // Don't auto-restore if anonymous visitor or in demo mode
-    const activeEmail = user?.email;
-    if (!activeEmail || user?.isDemo) return;
 
-    // A wiped database has 0 bookings and 0 students
-    const isBackendEmpty = 
-      Array.isArray(fetchedBookings) && fetchedBookings.length === 0 && 
-      Array.isArray(fetchedStudents) && fetchedStudents.length === 0;
-      
-    if (!isBackendEmpty) return;
-
-    // Retrieve cached backup from local storage
-    const cacheStr = localStorage.getItem(`jadsans_auto_backup_${activeEmail}`);
-    if (!cacheStr) return;
-
-    try {
-      const cachedData = JSON.parse(cacheStr);
-      if (cachedData && (cachedData.bookings?.length > 0 || cachedData.students?.length > 0)) {
-        console.log('[Auto-Restore] Ephemeral wipe detected. Silently restoring from browser cache for:', activeEmail);
-        
-        const res = await apiFetch('/api/restore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cachedData)
-        });
-
-        if (res.ok) {
-          console.log('[Auto-Restore] Silent restore successful!');
-          // Re-fetch everything
-          await fetchBookings();
-          await fetchStudents();
-          await fetchCategories();
-        }
-      }
-    } catch (err) {
-      console.error('[Auto-Restore] Failed to parse or restore from cache:', err);
-    }
-  };
 
   // Auto-backup caching hook scoped per teacher account
   useEffect(() => {
@@ -263,9 +225,7 @@ export default function App() {
       const sData = await fetchStudents();
       const cData = await fetchCategories();
 
-      if (user && bData && sData) {
-        await checkAndAutoRestore(bData, sData, cData);
-      }
+
     };
     fetchData();
   }, [activeView, user?.isDemo, user?.email]);
