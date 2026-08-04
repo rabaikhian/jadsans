@@ -1885,7 +1885,7 @@ export default function MasterView({ bookings, students = [], categories = [], o
               {/* Reset Database Section */}
               <div style={{ background: '#fff1f2', padding: '16px', borderRadius: '16px', border: '1px solid #fecdd3' }}>
                 <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#9f1239', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertTriangle size={16} color="#9f1239" /> 4. รีเซ็ตระบบ (Reset Database)
+                  <AlertCircle size={16} color="#9f1239" /> 4. รีเซ็ตระบบ (Reset Database)
                 </h3>
                 <p style={{ margin: '0 0 12px 0', lineHeight: '1.4', color: '#4f5e71' }}>
                   ล้างข้อมูลตารางเรียน รายชื่อนักเรียน และหัวข้อทั้งหมดเพื่อเริ่มต้นเก็บค่าใหม่
