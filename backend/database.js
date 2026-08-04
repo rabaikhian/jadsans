@@ -502,7 +502,7 @@ export const dbService = {
       writeJSON(bookingsPath, filteredBookings);
 
       console.log(`[DB] Deleted category "${name}" in JSON`);
-      return { success: true, studentsDeleted: studentRes.deletedCount, bookingsDeleted: bookingRes.deletedCount };
+      return { success: true, studentsDeleted, bookingsDeleted };
     }
   },
 
@@ -687,5 +687,52 @@ export const dbService = {
         console.log(`[DB] Session deleted for token: ${token.substring(0, 8)}... from JSON`);
       }
     }
+  },
+
+  isMongoDB() {
+    return useMongo;
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
