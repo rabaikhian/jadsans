@@ -653,6 +653,58 @@ export default function MasterView({ bookings, students = [], categories = [], o
       setBackupLoading(false);
     }
   };
+
+  const handleResetDatabase = async () => {
+    if (user?.isDemo) {
+      alert('This is a demo view of the system. Resetting database is disabled.');
+      return;
+    }
+    
+    if (window.confirm('⚠️ คำเตือน: คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตข้อมูลทั้งหมดในระบบ? รายชื่อนักเรียนและคิวตารางเรียนของครูทุกคนจะถูกลบออกทั้งหมด และไม่สามารถกู้คืนได้!')) {
+      try {
+        setBackupLoading(true);
+        setBackupStatus({ type: 'info', message: 'กำลังรีเซ็ตข้อมูลระบบ...' });
+        
+        const resetData = {
+          bookings: [],
+          students: [],
+          topics: ["Math: Fractions", "Math: Algebra", "English: Grammar", "Science: Forces"],
+          categories: ["งานสอน"]
+        };
+        
+        const res = await apiFetch('/api/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(resetData)
+        });
+        
+        if (res.ok) {
+          setBackupStatus({ 
+            type: 'success', 
+            message: 'รีเซ็ตข้อมูลทั้งหมดเรียบร้อยแล้ว! ระบบเริ่มเก็บค่าใหม่' 
+          });
+          
+          // Clear auto backup local cache for current user to avoid restoring old data
+          const activeEmail = user?.email;
+          if (activeEmail) {
+            localStorage.removeItem(`jadsans_auto_backup_${activeEmail}`);
+          }
+          
+          if (onStudentsChanged) await onStudentsChanged();
+          if (onBookingsChanged) await onBookingsChanged();
+          if (onCategoriesChanged) await onCategoriesChanged();
+        } else {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to reset database');
+        }
+      } catch (err) {
+        console.error(err);
+        setBackupStatus({ type: 'error', message: err.message || 'เกิดข้อผิดพลาดในการรีเซ็ตข้อมูล' });
+      } finally {
+        setBackupLoading(false);
+      }
+    }
+  };
   
   // Modal states for details/editing
   const [activeDetailBooking, setActiveDetailBooking] = useState(null);
@@ -1829,6 +1881,39 @@ export default function MasterView({ bookings, students = [], categories = [], o
                   </button>
                 </div>
               )}
+
+              {/* Reset Database Section */}
+              <div style={{ background: '#fff1f2', padding: '16px', borderRadius: '16px', border: '1px solid #fecdd3' }}>
+                <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#9f1239', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={16} color="#9f1239" /> 4. รีเซ็ตระบบ (Reset Database)
+                </h3>
+                <p style={{ margin: '0 0 12px 0', lineHeight: '1.4', color: '#4f5e71' }}>
+                  ล้างข้อมูลตารางเรียน รายชื่อนักเรียน และหัวข้อทั้งหมดเพื่อเริ่มต้นเก็บค่าใหม่
+                </p>
+                <button
+                  onClick={handleResetDatabase}
+                  disabled={backupLoading}
+                  style={{
+                    width: '100%',
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)',
+                    opacity: backupLoading ? 0.7 : 1
+                  }}
+                >
+                  <Trash2 size={16} />
+                  รีเซ็ตข้อมูลทั้งหมดใหม่
+                </button>
+              </div>
             </div>
 
             {/* Status alerts */}
