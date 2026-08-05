@@ -104,6 +104,15 @@ app.get('/auth/status', (req, res) => {
   }
 });
 
+// Database Health check
+app.get('/api/db-health', (req, res) => {
+  res.json({
+    isMongoDB: dbService.isMongoDB(),
+    mongodbUriSet: !!process.env.MONGODB_URI,
+    envNodeEnv: process.env.NODE_ENV
+  });
+});
+
 // Redirect to Google Consent Page
 app.get('/auth/google', (req, res) => {
   const { account } = req.query;
