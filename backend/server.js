@@ -135,6 +135,41 @@ app.get('/api/db-health', async (req, res) => {
   });
 });
 
+// Database Diagnostics
+app.get('/api/db-diagnostics', async (req, res) => {
+  const uri = process.env.MONGODB_URI || "mongodb+srv://rabaikhian_db_user:f0IB375JaL88F1tR@cluster0.cp6al3b.mongodb.net/?appName=Cluster0";
+  try {
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+    await client.connect();
+    const db = client.db('jadsans');
+    
+    const bookingsCount = await db.collection('bookings').countDocuments();
+    const studentsCount = await db.collection('students').countDocuments();
+    const categoriesCount = await db.collection('categories').countDocuments();
+    const topicsCount = await db.collection('topics').countDocuments();
+    
+    const sampleBookings = await db.collection('bookings').find({}).limit(3).toArray();
+    const sampleStudents = await db.collection('students').find({}).limit(3).toArray();
+    
+    await client.close();
+    
+    res.json({
+      success: true,
+      bookingsCount,
+      studentsCount,
+      categoriesCount,
+      topicsCount,
+      sampleBookings,
+      sampleStudents
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 // Redirect to Google Consent Page
 app.get('/auth/google', (req, res) => {
   const { account } = req.query;
