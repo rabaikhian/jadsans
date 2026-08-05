@@ -10,7 +10,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const rawFrontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = rawFrontendUrl.endsWith('/') ? rawFrontendUrl.slice(0, -1) : rawFrontendUrl;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // Trust proxy (required for Render, Railway, etc.)
