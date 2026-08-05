@@ -606,21 +606,37 @@ export default function MasterView({ bookings, students = [], categories = [], o
     e.target.value = '';
   };
 
-  const handleRestoreFromBrowserCache = async () => {
-    const activeEmail = user?.email;
-    if (!activeEmail) {
-      setBackupStatus({ type: 'error', message: 'กรุณาเข้าสู่ระบบก่อน' });
-      return;
+  const getAvailableBrowserBackups = () => {
+    const backups = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('jadsans_auto_backup_')) {
+        const email = key.replace('jadsans_auto_backup_', '');
+        try {
+          const val = localStorage.getItem(key);
+          const data = JSON.parse(val);
+          if (data && (data.bookings?.length > 0 || data.students?.length > 0)) {
+            backups.push({
+              key,
+              email,
+              bookingsCount: data.bookings?.length || 0,
+              studentsCount: data.students?.length || 0,
+              categoriesCount: data.categories?.length || 0
+            });
+          }
+        } catch (e) {
+          // ignore invalid JSON
+        }
+      }
     }
-    const cacheStr = localStorage.getItem(`jadsans_auto_backup_${activeEmail}`);
-    if (!cacheStr) {
-      setBackupStatus({ type: 'error', message: 'ไม่พบข้อมูลสำรองในเว็บเบราว์เซอร์นี้' });
-      return;
-    }
+    return backups;
+  };
 
+  const handleRestoreFromKey = async (key) => {
     try {
       setBackupLoading(true);
-      setBackupStatus({ type: 'info', message: 'กำลังกู้คืนข้อมูลจากเบราว์เซอร์...' });
+      setBackupStatus({ type: 'info', message: 'กำลังกู้คืนข้อมูล...' });
+      const cacheStr = localStorage.getItem(key);
       const data = JSON.parse(cacheStr);
       
       if (!data || (!data.bookings && !data.students && !data.categories)) {
@@ -1848,16 +1864,16 @@ export default function MasterView({ bookings, students = [], categories = [], o
               </div>
 
               {/* Browser Cache Restore Section */}
-              {localStorage.getItem(`jadsans_auto_backup_${user?.email}`) && (
-                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              {getAvailableBrowserBackups().map((backup) => (
+                <div key={backup.key} style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', marginTop: '12px' }}>
                   <h3 style={{ fontWeight: '700', fontSize: '0.9rem', color: '#0f172a', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Database size={16} /> 3. กู้คืนจากเบราว์เซอร์ (Auto-Backup)
+                    <Database size={16} /> 3. กู้คืนจากเบราว์เซอร์ ({backup.email === user?.email ? 'บัญชีปัจจุบัน' : `บัญชี: ${backup.email}`})
                   </h3>
-                  <p style={{ margin: '0 0 12px 0', lineHeight: '1.4' }}>
-                    พบข้อมูลสำรองอัตโนมัติในเบราว์เซอร์นี้ คุณสามารถคลิกเพื่อดึงข้อมูลทั้งหมดเข้าสู่ระบบคลาวด์ได้โดยตรง
+                  <p style={{ margin: '0 0 12px 0', lineHeight: '1.4', color: '#475569' }}>
+                    พบข้อมูลสำรอง (ตารางเรียน: {backup.bookingsCount}, นักเรียน: {backup.studentsCount}) ของบัญชี <strong>{backup.email}</strong> ในเบราว์เซอร์นี้
                   </p>
                   <button
-                    onClick={handleRestoreFromBrowserCache}
+                    onClick={() => handleRestoreFromKey(backup.key)}
                     disabled={backupLoading}
                     style={{
                       width: '100%',
@@ -1877,10 +1893,10 @@ export default function MasterView({ bookings, students = [], categories = [], o
                     }}
                   >
                     <Database size={16} />
-                    ดึงข้อมูลสำรองจากเบราว์เซอร์นี้
+                    ดึงข้อมูลสำรองบัญชี {backup.email} เข้าสู่ระบบ
                   </button>
                 </div>
-              )}
+              ))}
 
               {/* Reset Database Section */}
               <div style={{ background: '#fff1f2', padding: '16px', borderRadius: '16px', border: '1px solid #fecdd3' }}>
