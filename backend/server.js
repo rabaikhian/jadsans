@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dbService } from './database.js';
 import { googleCalendarService } from './googleCalendar.js';
+import { MongoClient } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,11 +106,32 @@ app.get('/auth/status', (req, res) => {
 });
 
 // Database Health check
-app.get('/api/db-health', (req, res) => {
+app.get('/api/db-health', async (req, res) => {
+  const uri = process.env.MONGODB_URI || "mongodb+srv://rabaikhian_db_user:f0IB375JaL88F1tR@cluster0.cp6al3b.mongodb.net/?appName=Cluster0";
+  let connectError = null;
+  let testSuccess = false;
+  
+  try {
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+    await client.connect();
+    await client.db('jadsans').command({ ping: 1 });
+    await client.close();
+    testSuccess = true;
+  } catch (err) {
+    connectError = {
+      message: err.message,
+      name: err.name,
+      code: err.code,
+      stack: err.stack ? err.stack.split('\n')[0] : null
+    };
+  }
+
   res.json({
     isMongoDB: dbService.isMongoDB(),
     mongodbUriSet: !!process.env.MONGODB_URI,
-    envNodeEnv: process.env.NODE_ENV
+    envNodeEnv: process.env.NODE_ENV,
+    testSuccess,
+    connectError
   });
 });
 
