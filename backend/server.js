@@ -3,8 +3,13 @@ import cors from 'cors';
 import session from 'express-session';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { dbService } from './database.js';
 import { googleCalendarService } from './googleCalendar.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -47,6 +52,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from backend/public
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(publicPath));
 
 // --- Token-based Session Fallback (Safari / Cross-site ITP fix) ---
 // Reads Authorization: Bearer <token> or x-session-token header and
@@ -98,6 +107,7 @@ app.get('/auth/status', (req, res) => {
 // Redirect to Google Consent Page
 app.get('/auth/google', (req, res) => {
   const { account } = req.query;
+  req.session.loginReferer = req.headers.referer || FRONTEND_URL;
   try {
     if (googleCalendarService.isMock()) {
       if (account) {
@@ -274,7 +284,9 @@ app.get('/auth/google/callback', async (req, res) => {
     // Generate a persistent token so Safari (no cross-site cookies) can authenticate
     const token = crypto.randomBytes(32).toString('hex');
     await dbService.saveSession(token, sessionUser);
-    res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
+    const redirectUrl = req.session.loginReferer || FRONTEND_URL;
+    const cleanRedirectUrl = redirectUrl.endsWith('/') ? redirectUrl.slice(0, -1) : redirectUrl;
+    res.redirect(`${cleanRedirectUrl}/?auth_token=${token}`);
   } catch (error) {
     console.error('OAuth callback failed:', error);
     res.status(500).send(`OAuth Authentication failed: ${error.message}`);
@@ -303,7 +315,9 @@ app.get('/auth/google/mock-callback', async (req, res) => {
     // Generate a persistent token so Safari (no cross-site cookies) can authenticate
     const token = crypto.randomBytes(32).toString('hex');
     await dbService.saveSession(token, userProfile);
-    res.redirect(`${FRONTEND_URL}/?auth_token=${token}`);
+    const redirectUrl = req.session.loginReferer || FRONTEND_URL;
+    const cleanRedirectUrl = redirectUrl.endsWith('/') ? redirectUrl.slice(0, -1) : redirectUrl;
+    res.redirect(`${cleanRedirectUrl}/?auth_token=${token}`);
   } catch (error) {
     console.error('Mock login failed:', error);
     res.status(500).send('Mock authentication failed.');
@@ -869,6 +883,14 @@ app.put('/api/topics/:oldName', async (req, res) => {
     console.error('Error updating topic:', error);
     res.status(500).json({ error: 'Server error updating topic' });
   }
+});
+
+// SPA fallback routing
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth')) {
+    return next();
+  }
+  res.sendFile(path.join(publicPath, 'index.html'));
 });
 
 // Start express listener
