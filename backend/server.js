@@ -928,3 +928,5 @@ app.get('*', (req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Scheduling Server is running at http://localhost:${PORT}`);
 });
+
+// Trigger restart to pick up successful MongoDB credentials
