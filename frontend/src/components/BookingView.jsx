@@ -474,7 +474,8 @@ export default function BookingView({ bookings = [], students = [], categories =
   const month = currentDate.getMonth();
 
   const getDynamicCategories = () => {
-    const defaults = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const rawDefaults = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const defaults = rawDefaults.map(c => typeof c === 'string' ? c : (c?.name || ''));
     const studentCats = students.map(s => s.category).filter(Boolean);
     const bookingCats = bookings.map(b => b.class_name).filter(Boolean);
     return Array.from(new Set([...defaults, ...studentCats, ...bookingCats]));

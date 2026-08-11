@@ -10,6 +10,7 @@ backend/students.json
 backend/topics.json
 backend/categories.json
 backend/sessions.json
+backend/partnerships.json
 
 # Local Environment Variables
 .env

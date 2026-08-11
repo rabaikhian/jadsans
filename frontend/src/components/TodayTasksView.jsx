@@ -227,7 +227,8 @@ const getCategoryHeaderStyle = (cat) => {
 
 export default function TodayTasksView({ bookings = [], students = [], categories = [], onBookingCreated, onCategoriesChanged }) {
   const getDynamicCategories = () => {
-    const defaults = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const rawDefaults = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const defaults = rawDefaults.map(c => typeof c === 'string' ? c : (c?.name || ''));
     const bookingCats = bookings.map(b => b.class_name).filter(Boolean);
     return Array.from(new Set([...defaults, ...bookingCats]));
   };
