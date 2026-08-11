@@ -10,6 +10,7 @@ const studentsPath = path.resolve(__dirname, 'students.json');
 const topicsPath = path.resolve(__dirname, 'topics.json');
 const categoriesPath = path.resolve(__dirname, 'categories.json');
 const sessionsPath = path.resolve(__dirname, 'sessions.json');
+const partnershipsPath = path.resolve(__dirname, 'partnerships.json');
 
 // Initialize database files if they do not exist
 const initFile = (filePath, initialData) => {
@@ -25,6 +26,7 @@ initFile(studentsPath, []);
 initFile(topicsPath, ["Math: Fractions", "Math: Algebra", "English: Grammar", "Science: Forces"]);
 initFile(categoriesPath, ["งานสอน"]);
 initFile(sessionsPath, {});
+initFile(partnershipsPath, []);
 
 // Helper to read/write JSON files atomically
 const readJSON = (filePath) => {
@@ -93,7 +95,7 @@ export const dbService = {
     }
   },
 
-  async createBooking({ class_name, student_name, date, start_time, end_time, notes, color, location, class_type, google_event_id, status, user_email }) {
+  async createBooking({ class_name, student_name, date, start_time, end_time, notes, color, location, class_type, google_event_id, google_event_ids, status, user_email }) {
     let newId;
     if (useMongo) {
       const maxDoc = await db.collection('bookings').find().sort({ id: -1 }).limit(1).next();
@@ -116,6 +118,7 @@ export const dbService = {
       location: location || '',
       class_type: class_type || 'Onsite',
       google_event_id: google_event_id || null,
+      google_event_ids: google_event_ids || null,
       status: status || 'scheduled',
       user_email: user_email || null,
       created_at: new Date().toISOString()
@@ -132,7 +135,7 @@ export const dbService = {
     return newBooking;
   },
 
-  async updateBooking(id, { class_name, student_name, date, start_time, end_time, notes, color, location, class_type, google_event_id, status }) {
+  async updateBooking(id, { class_name, student_name, date, start_time, end_time, notes, color, location, class_type, google_event_id, google_event_ids, status }) {
     if (useMongo) {
       const existing = await db.collection('bookings').findOne({ id: Number(id) });
       if (!existing) return null;
@@ -149,6 +152,7 @@ export const dbService = {
         location: location || existing.location || '',
         class_type: class_type || existing.class_type || 'Onsite',
         google_event_id: google_event_id !== undefined ? google_event_id : existing.google_event_id,
+        google_event_ids: google_event_ids !== undefined ? google_event_ids : existing.google_event_ids,
         status: status !== undefined ? status : existing.status,
         updated_at: new Date().toISOString()
       };
@@ -173,6 +177,7 @@ export const dbService = {
         location: location || bookings[index].location || '',
         class_type: class_type || bookings[index].class_type || 'Onsite',
         google_event_id: google_event_id !== undefined ? google_event_id : bookings[index].google_event_id,
+        google_event_ids: google_event_ids !== undefined ? google_event_ids : bookings[index].google_event_ids,
         status: status !== undefined ? status : bookings[index].status,
         updated_at: new Date().toISOString()
       };
@@ -391,39 +396,62 @@ export const dbService = {
   async getAllCategories() {
     if (useMongo) {
       const docs = await db.collection('categories').find({}).toArray();
-      return docs.map(d => d.name);
+      return docs.map(d => ({
+        name: d.name,
+        google_calendar_name: d.google_calendar_name || ''
+      }));
     } else {
-      return readJSON(categoriesPath);
+      const raw = readJSON(categoriesPath) || [];
+      return raw.map(c => {
+        if (typeof c === 'string') {
+          return { name: c, google_calendar_name: '' };
+        }
+        return {
+          name: c.name || '',
+          google_calendar_name: c.google_calendar_name || ''
+        };
+      });
     }
   },
 
-  async createCategory(name) {
+  async createCategory(name, google_calendar_name = '') {
     const trimmed = name.trim();
     if (!trimmed) return null;
 
     if (useMongo) {
       const existing = await db.collection('categories').findOne({ name: trimmed });
-      if (existing) return trimmed;
+      if (existing) {
+        await db.collection('categories').updateOne({ name: trimmed }, { $set: { google_calendar_name } });
+        return { name: trimmed, google_calendar_name };
+      }
 
-      await db.collection('categories').insertOne({ name: trimmed });
+      await db.collection('categories').insertOne({ name: trimmed, google_calendar_name });
       console.log(`[DB] Created category: ${trimmed} in MongoDB`);
-      return trimmed;
+      return { name: trimmed, google_calendar_name };
     } else {
-      const categories = readJSON(categoriesPath);
-      if (categories.includes(trimmed)) return trimmed;
-      categories.push(trimmed);
+      const categories = readJSON(categoriesPath) || [];
+      const index = categories.findIndex(c => (typeof c === 'string' ? c : c.name) === trimmed);
+      if (index !== -1) {
+        categories[index] = { name: trimmed, google_calendar_name };
+        writeJSON(categoriesPath, categories);
+        return { name: trimmed, google_calendar_name };
+      }
+      categories.push({ name: trimmed, google_calendar_name });
       writeJSON(categoriesPath, categories);
       console.log(`[DB] Created category: ${trimmed} in JSON`);
-      return trimmed;
+      return { name: trimmed, google_calendar_name };
     }
   },
 
-  async updateCategory(oldName, newName) {
+  async updateCategory(oldName, newName, google_calendar_name = '') {
     const trimmedNewName = newName.trim();
 
     if (useMongo) {
       // Update categories collection
-      await db.collection('categories').updateOne({ name: oldName }, { $set: { name: trimmedNewName } });
+      await db.collection('categories').updateOne(
+        { name: oldName },
+        { $set: { name: trimmedNewName, google_calendar_name } }
+      );
 
       // Update students
       const studentRes = await db.collection('students').updateMany(
@@ -440,14 +468,14 @@ export const dbService = {
       console.log(`[DB] Updated category from "${oldName}" to "${trimmedNewName}" in MongoDB`);
       return { success: true, studentsUpdated: studentRes.modifiedCount, bookingsUpdated: bookingRes.modifiedCount };
     } else {
-      const categories = readJSON(categoriesPath);
-      const catIndex = categories.indexOf(oldName);
+      const categories = readJSON(categoriesPath) || [];
+      const catIndex = categories.findIndex(c => (typeof c === 'string' ? c : c.name) === oldName);
       if (catIndex !== -1) {
-        categories[catIndex] = trimmedNewName;
+        categories[catIndex] = { name: trimmedNewName, google_calendar_name };
         writeJSON(categoriesPath, categories);
       }
 
-      const students = readJSON(studentsPath);
+      const students = readJSON(studentsPath) || [];
       let studentsUpdated = 0;
       const updatedStudents = students.map(s => {
         if ((s.category || 'งานสอน') === oldName) {
@@ -460,7 +488,7 @@ export const dbService = {
         writeJSON(studentsPath, updatedStudents);
       }
 
-      const bookings = readJSON(bookingsPath);
+      const bookings = readJSON(bookingsPath) || [];
       let bookingsUpdated = 0;
       const updatedBookings = bookings.map(b => {
         if ((b.class_name || 'งานสอน') === oldName) {
@@ -487,21 +515,21 @@ export const dbService = {
       console.log(`[DB] Deleted category "${name}" from MongoDB`);
       return { success: true, studentsDeleted: studentRes.deletedCount, bookingsDeleted: bookingRes.deletedCount };
     } else {
-      const categories = readJSON(categoriesPath);
-      const filteredCategories = categories.filter(c => c !== name);
+      const categories = readJSON(categoriesPath) || [];
+      const filteredCategories = categories.filter(c => (typeof c === 'string' ? c : c.name) !== name);
       writeJSON(categoriesPath, filteredCategories);
 
-      const students = readJSON(studentsPath);
+      const students = readJSON(studentsPath) || [];
       const filteredStudents = students.filter(s => (s.category || 'งานสอน') !== name);
       const studentsDeleted = students.length - filteredStudents.length;
       writeJSON(studentsPath, filteredStudents);
 
-      const bookings = readJSON(bookingsPath);
+      const bookings = readJSON(bookingsPath) || [];
       const filteredBookings = bookings.filter(b => (b.class_name || 'งานสอน') !== name);
       const bookingsDeleted = bookings.length - filteredBookings.length;
       writeJSON(bookingsPath, filteredBookings);
 
-      console.log(`[DB] Deleted category "${name}" in JSON`);
+      console.log(`[DB] Deleted category "${name}" from JSON`);
       return { success: true, studentsDeleted, bookingsDeleted };
     }
   },
@@ -686,6 +714,102 @@ export const dbService = {
         writeJSON(sessionsPath, sessions);
         console.log(`[DB] Session deleted for token: ${token.substring(0, 8)}... from JSON`);
       }
+    }
+  },
+
+  async getPartners(email) {
+    if (!email) return [];
+    const normalized = email.toLowerCase().trim();
+    const result = new Set([normalized]);
+
+    if (useMongo) {
+      const docs = await db.collection('partnerships').find({
+        $or: [
+          { owner_email: normalized },
+          { partner_email: normalized }
+        ]
+      }).toArray();
+      docs.forEach(d => {
+        if (d.owner_email) result.add(d.owner_email.toLowerCase());
+        if (d.partner_email) result.add(d.partner_email.toLowerCase());
+      });
+    } else {
+      const partnerships = readJSON(partnershipsPath) || [];
+      partnerships.forEach(p => {
+        const owner = (p.owner_email || '').toLowerCase().trim();
+        const partner = (p.partner_email || '').toLowerCase().trim();
+        if (owner === normalized || partner === normalized) {
+          if (owner) result.add(owner);
+          if (partner) result.add(partner);
+        }
+      });
+    }
+    return Array.from(result);
+  },
+
+  async addPartner(ownerEmail, partnerEmail) {
+    if (!ownerEmail || !partnerEmail) return null;
+    const owner = ownerEmail.toLowerCase().trim();
+    const partner = partnerEmail.toLowerCase().trim();
+    if (owner === partner) return null;
+
+    const newEntry = {
+      owner_email: owner,
+      partner_email: partner,
+      created_at: new Date().toISOString()
+    };
+
+    if (useMongo) {
+      const existing = await db.collection('partnerships').findOne({
+        $or: [
+          { owner_email: owner, partner_email: partner },
+          { owner_email: partner, partner_email: owner }
+        ]
+      });
+      if (existing) return existing;
+      await db.collection('partnerships').insertOne(newEntry);
+      console.log(`[DB] Added partnership between ${owner} and ${partner} in MongoDB`);
+      return newEntry;
+    } else {
+      const partnerships = readJSON(partnershipsPath) || [];
+      const existing = partnerships.find(p => {
+        const o = p.owner_email.toLowerCase();
+        const pt = p.partner_email.toLowerCase();
+        return (o === owner && pt === partner) || (o === partner && pt === owner);
+      });
+      if (existing) return existing;
+      partnerships.push(newEntry);
+      writeJSON(partnershipsPath, partnerships);
+      console.log(`[DB] Added partnership between ${owner} and ${partner} in JSON`);
+      return newEntry;
+    }
+  },
+
+  async deletePartner(ownerEmail, partnerEmail) {
+    if (!ownerEmail || !partnerEmail) return false;
+    const owner = ownerEmail.toLowerCase().trim();
+    const partner = partnerEmail.toLowerCase().trim();
+
+    if (useMongo) {
+      const res = await db.collection('partnerships').deleteMany({
+        $or: [
+          { owner_email: owner, partner_email: partner },
+          { owner_email: partner, partner_email: owner }
+        ]
+      });
+      console.log(`[DB] Deleted partnership between ${owner} and ${partner} from MongoDB`);
+      return res.deletedCount > 0;
+    } else {
+      const partnerships = readJSON(partnershipsPath) || [];
+      const filtered = partnerships.filter(p => {
+        const o = p.owner_email.toLowerCase();
+        const pt = p.partner_email.toLowerCase();
+        return !((o === owner && pt === partner) || (o === partner && pt === owner));
+      });
+      const deleted = partnerships.length - filtered.length;
+      writeJSON(partnershipsPath, filtered);
+      console.log(`[DB] Deleted partnership between ${owner} and ${partner} from JSON`);
+      return deleted > 0;
     }
   },
 

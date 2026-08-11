@@ -1308,12 +1308,25 @@ export default function MasterView({ bookings, students = [], categories = [], o
                       options={dynamicCategories.map(c => ({ value: c, label: c }))}
                       onEditOption={async (opt) => {
                         const newName = window.prompt(`แก้ไขชื่อหมวดหมู่ "${opt.label}" เป็น:`, opt.label);
-                        if (newName && newName.trim() && newName.trim() !== opt.label) {
+                        if (newName && newName.trim()) {
+                          const existingCatObj = Array.isArray(categories) 
+                            ? categories.find(c => (c.name || c) === opt.label) 
+                            : null;
+                          const currentCalName = existingCatObj ? (existingCatObj.google_calendar_name || '') : '';
+                          const googleCalendarName = window.prompt(
+                            `ป้อนชื่อปฏิทิน Google Calendar ที่ต้องการซิงค์แยกสำหรับหมวดหมู่ "${newName.trim()}"\n(ปล่อยว่างหากต้องการใช้ปฏิทินหลัก):`,
+                            currentCalName
+                          );
+                          if (googleCalendarName === null) return; // cancelled
+
                           try {
                             const res = await apiFetch(`/api/categories/${encodeURIComponent(opt.value)}`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ newName: newName.trim() })
+                              body: JSON.stringify({ 
+                                newName: newName.trim(),
+                                google_calendar_name: googleCalendarName.trim()
+                              })
                             });
                             if (res.ok) {
                               if (onStudentsChanged) await onStudentsChanged();

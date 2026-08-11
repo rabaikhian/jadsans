@@ -4,6 +4,7 @@ import BookingView from './components/BookingView';
 import MasterView from './components/MasterView';
 import TodayTasksView from './components/TodayTasksView';
 import StudentProfilesView from './components/StudentProfilesView';
+import PartnersView from './components/PartnersView';
 import LoginView from './components/LoginView';
 import LandingView from './components/LandingView';
 import { getDemoStudents, getDemoBookings } from './utils/demoData';
@@ -373,6 +374,13 @@ export default function App() {
                     <GraduationCap size={16} />
                     Student Profiles
                   </button>
+                  <button
+                    className={`tab-btn ${activeView === 'partners' ? 'active' : ''}`}
+                    onClick={() => changeView('partners')}
+                  >
+                    <Users size={16} />
+                    ทีม / พาร์ทเนอร์
+                  </button>
                 </>
               )}
             </div>
@@ -436,6 +444,8 @@ export default function App() {
             onBookingCreated={fetchBookings} 
             onLoginRequested={handleLogin}
           />
+        ) : activeView === 'partners' ? (
+          <PartnersView />
         ) : (
           <StudentProfilesView 
             students={students}

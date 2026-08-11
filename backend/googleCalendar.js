@@ -138,89 +138,160 @@ export const googleCalendarService = {
     };
   },
 
+  async getOrCreateCalendar(email, auth, calendarName) {
+    if (!calendarName || calendarName.trim() === '') {
+      return 'primary';
+    }
+    const name = calendarName.trim();
+    
+    try {
+      const calendar = google.calendar({ version: 'v3', auth });
+      const listRes = await calendar.calendarList.list();
+      const existing = listRes.data.items.find(item => item.summary === name);
+      if (existing) {
+        return existing.id;
+      }
+      
+      console.log(`[GOOGLE CALENDAR] Creating new calendar: "${name}" for ${email}`);
+      const newCal = await calendar.calendars.insert({
+        requestBody: {
+          summary: name,
+          timeZone: 'Asia/Bangkok'
+        }
+      });
+      return newCal.data.id;
+    } catch (err) {
+      console.error(`[GOOGLE CALENDAR] Error in getOrCreateCalendar for "${name}":`, err.message);
+      return 'primary';
+    }
+  },
+
   async createEvent(email, booking) {
     if (!hasCredentials) {
       const mockEventId = `mock_event_${Math.random().toString(36).substring(2, 11)}`;
       console.log(`[MOCK CALENDAR] Created event "${booking.class_name}" for ${email}. EventID: ${mockEventId}`);
-      return mockEventId;
+      return { google_event_id: mockEventId, google_event_ids: { [email]: mockEventId } };
     }
 
+    const eventIds = {};
     try {
-      const auth = await this.getAuthClientForUser(email);
-      const calendar = google.calendar({ version: 'v3', auth });
-      const eventResource = this._formatEvent(booking);
+      const partners = await dbService.getPartners(email);
+      const categories = await dbService.getAllCategories();
+      const catObj = categories.find(c => c.name === booking.class_name);
+      const calendarName = catObj ? catObj.google_calendar_name : '';
 
-      const response = await calendar.events.insert({
-        calendarId: 'primary',
-        resource: eventResource
-      });
+      for (const partner of partners) {
+        try {
+          const auth = await this.getAuthClientForUser(partner);
+          const calendarId = await this.getOrCreateCalendar(partner, auth, calendarName);
+          
+          const calendar = google.calendar({ version: 'v3', auth });
+          const eventResource = this._formatEvent(booking);
 
-      console.log(`[GOOGLE CALENDAR] Successfully created event. EventID: ${response.data.id}`);
-      return response.data.id;
+          const response = await calendar.events.insert({
+            calendarId,
+            resource: eventResource
+          });
+          eventIds[partner] = response.data.id;
+          console.log(`[GOOGLE CALENDAR] Successfully created event for ${partner}. EventID: ${response.data.id}`);
+        } catch (err) {
+          console.warn(`[GOOGLE CALENDAR] Skip creating event for partner ${partner}:`, err.message);
+        }
+      }
     } catch (error) {
       console.error('[GOOGLE CALENDAR] Error creating event:', error.message);
-      throw error;
     }
+    
+    const primaryId = eventIds[email] || Object.values(eventIds)[0] || '';
+    return { google_event_id: primaryId, google_event_ids: eventIds };
   },
 
-  async updateEvent(email, googleEventId, booking) {
-    if (!googleEventId) return null;
+  async updateEvent(email, googleEventId, booking, googleEventIds = {}) {
+    if (!googleEventId && Object.keys(googleEventIds || {}).length === 0) return null;
 
     if (!hasCredentials) {
       console.log(`[MOCK CALENDAR] Updated event ID ${googleEventId} with new details: "${booking.class_name}"`);
-      return googleEventId;
+      return { google_event_id: googleEventId, google_event_ids: googleEventIds };
     }
 
+    const eventIds = { ...(googleEventIds || {}) };
     try {
-      const auth = await this.getAuthClientForUser(email);
-      const calendar = google.calendar({ version: 'v3', auth });
-      const eventResource = this._formatEvent(booking);
+      const partners = await dbService.getPartners(email);
+      const categories = await dbService.getAllCategories();
+      const catObj = categories.find(c => c.name === booking.class_name);
+      const calendarName = catObj ? catObj.google_calendar_name : '';
 
-      const response = await calendar.events.update({
-        calendarId: 'primary',
-        eventId: googleEventId,
-        resource: eventResource
-      });
+      for (const partner of partners) {
+        const partnerEventId = eventIds[partner] || (partner === email ? googleEventId : null);
+        try {
+          const auth = await this.getAuthClientForUser(partner);
+          const calendarId = await this.getOrCreateCalendar(partner, auth, calendarName);
+          const calendar = google.calendar({ version: 'v3', auth });
+          const eventResource = this._formatEvent(booking);
 
-      console.log(`[GOOGLE CALENDAR] Successfully updated event. EventID: ${response.data.id}`);
-      return response.data.id;
-    } catch (error) {
-      console.error(`[GOOGLE CALENDAR] Error updating event ID ${googleEventId}:`, error.message);
-      // If event was deleted from Google Calendar directly, create a new one instead of failing
-      if (error.code === 404 || error.status === 404) {
-        console.log(`[GOOGLE CALENDAR] Event ID ${googleEventId} not found on Google Calendar. Creating a replacement...`);
-        return await this.createEvent(email, booking);
+          if (partnerEventId) {
+            const response = await calendar.events.update({
+              calendarId,
+              eventId: partnerEventId,
+              resource: eventResource
+            });
+            console.log(`[GOOGLE CALENDAR] Successfully updated event for ${partner}. EventID: ${response.data.id}`);
+          } else {
+            const response = await calendar.events.insert({
+              calendarId,
+              resource: eventResource
+            });
+            eventIds[partner] = response.data.id;
+            console.log(`[GOOGLE CALENDAR] Created missing event for partner ${partner}. EventID: ${response.data.id}`);
+          }
+        } catch (err) {
+          console.warn(`[GOOGLE CALENDAR] Skip updating event for partner ${partner}:`, err.message);
+        }
       }
-      throw error;
+    } catch (error) {
+      console.error('[GOOGLE CALENDAR] Error updating event:', error.message);
     }
+    const primaryId = eventIds[email] || Object.values(eventIds)[0] || googleEventId;
+    return { google_event_id: primaryId, google_event_ids: eventIds };
   },
 
-  async deleteEvent(email, googleEventId) {
-    if (!googleEventId) return false;
+  async deleteEvent(email, googleEventId, googleEventIds = {}, bookingCategory = '') {
+    if (!googleEventId && Object.keys(googleEventIds || {}).length === 0) return false;
 
     if (!hasCredentials) {
       console.log(`[MOCK CALENDAR] Deleted event ID ${googleEventId}`);
       return true;
     }
 
+    const eventIds = { ...(googleEventIds || {}) };
     try {
-      const auth = await this.getAuthClientForUser(email);
-      const calendar = google.calendar({ version: 'v3', auth });
+      const partners = await dbService.getPartners(email);
+      const categories = await dbService.getAllCategories();
+      const catObj = categories.find(c => c.name === bookingCategory);
+      const calendarName = catObj ? catObj.google_calendar_name : '';
 
-      await calendar.events.delete({
-        calendarId: 'primary',
-        eventId: googleEventId
-      });
+      for (const partner of partners) {
+        const partnerEventId = eventIds[partner] || (partner === email ? googleEventId : null);
+        if (!partnerEventId) continue;
 
-      console.log(`[GOOGLE CALENDAR] Successfully deleted event. EventID: ${googleEventId}`);
+        try {
+          const auth = await this.getAuthClientForUser(partner);
+          const calendarId = await this.getOrCreateCalendar(partner, auth, calendarName);
+          const calendar = google.calendar({ version: 'v3', auth });
+
+          await calendar.events.delete({
+            calendarId,
+            eventId: partnerEventId
+          });
+          console.log(`[GOOGLE CALENDAR] Successfully deleted event for ${partner}. EventID: ${partnerEventId}`);
+        } catch (err) {
+          console.warn(`[GOOGLE CALENDAR] Skip deleting event for partner ${partner}:`, err.message);
+        }
+      }
       return true;
     } catch (error) {
-      console.error(`[GOOGLE CALENDAR] Error deleting event ID ${googleEventId}:`, error.message);
-      if (error.code === 410 || error.code === 404) {
-        // Already gone
-        return true;
-      }
-      throw error;
+      console.error('[GOOGLE CALENDAR] Error deleting event:', error.message);
+      return false;
     }
   }
 };

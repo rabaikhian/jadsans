@@ -105,6 +105,62 @@ app.get('/auth/status', (req, res) => {
   }
 });
 
+// GET list of partners
+app.get('/api/partners', async (req, res) => {
+  const activeEmail = req.session.user ? req.session.user.email : null;
+  if (!activeEmail) {
+    return res.status(401).json({ error: 'Please log in first' });
+  }
+  try {
+    const allPartners = await dbService.getPartners(activeEmail);
+    // Filter out the user's own email to show only external partners
+    const partners = allPartners.filter(p => p.toLowerCase() !== activeEmail.toLowerCase());
+    res.json(partners);
+  } catch (error) {
+    console.error('Error fetching partners:', error);
+    res.status(500).json({ error: 'Failed to retrieve partners' });
+  }
+});
+
+// POST to add/invite a partner
+app.post('/api/partners', async (req, res) => {
+  const activeEmail = req.session.user ? req.session.user.email : null;
+  if (!activeEmail) {
+    return res.status(401).json({ error: 'Please log in first' });
+  }
+  const { email } = req.body;
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Partner email is required' });
+  }
+  const partnerEmail = email.trim().toLowerCase();
+  if (partnerEmail === activeEmail.toLowerCase()) {
+    return res.status(400).json({ error: 'Cannot add yourself as a partner' });
+  }
+  try {
+    const result = await dbService.addPartner(activeEmail, partnerEmail);
+    res.json({ success: true, partner: partnerEmail });
+  } catch (error) {
+    console.error('Error adding partner:', error);
+    res.status(500).json({ error: 'Failed to add partner' });
+  }
+});
+
+// DELETE to remove a partner
+app.delete('/api/partners/:email', async (req, res) => {
+  const activeEmail = req.session.user ? req.session.user.email : null;
+  if (!activeEmail) {
+    return res.status(401).json({ error: 'Please log in first' });
+  }
+  const partnerEmail = req.params.email.trim().toLowerCase();
+  try {
+    await dbService.deletePartner(activeEmail, partnerEmail);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting partner:', error);
+    res.status(500).json({ error: 'Failed to remove partner' });
+  }
+});
+
 // Database Health check
 app.get('/api/db-health', async (req, res) => {
   const uri = process.env.MONGODB_URI || "mongodb+srv://rabaikhian_db_user:f0IB375JaL88F1tR@cluster0.cp6al3b.mongodb.net/?appName=Cluster0";
@@ -467,8 +523,12 @@ app.get('/api/bookings', async (req, res) => {
     const activeEmail = owner || (req.session.user ? req.session.user.email : null);
     
     if (activeEmail) {
-      // Attribute bookings without a user_email field to the activeEmail so they are not hidden
-      bookings = bookings.filter(b => (b.user_email || activeEmail) === activeEmail);
+      const partners = await dbService.getPartners(activeEmail);
+      // Retrieve bookings owned by any partner in the team
+      bookings = bookings.filter(b => {
+        const ownerEmail = (b.user_email || activeEmail).toLowerCase().trim();
+        return partners.includes(ownerEmail);
+      });
     } else {
       // Anonymous public visit to root without owner parameter:
       // Default to the first mock account's bookings to keep dashboard populated.
@@ -518,13 +578,14 @@ app.post('/api/bookings', async (req, res) => {
     }
 
     let googleEventId = null;
+    let googleEventIds = null;
 
     // Check if user is authenticated to sync with their calendar
     if (req.session.user && req.session.user.email) {
       const email = req.session.user.email;
       console.log(`Syncing new booking to Google Calendar for: ${email}`);
       try {
-        googleEventId = await googleCalendarService.createEvent(email, {
+        const syncResult = await googleCalendarService.createEvent(email, {
           class_name,
           student_name,
           date,
@@ -535,6 +596,10 @@ app.post('/api/bookings', async (req, res) => {
           location,
           class_type
         });
+        if (syncResult) {
+          googleEventId = syncResult.google_event_id;
+          googleEventIds = syncResult.google_event_ids;
+        }
       } catch (syncErr) {
         console.error('Failed to sync to Google Calendar. Saving locally only.', syncErr.message);
       }
@@ -553,6 +618,7 @@ app.post('/api/bookings', async (req, res) => {
       location,
       class_type,
       google_event_id: googleEventId,
+      google_event_ids: googleEventIds,
       user_email: userEmail
     });
 
@@ -606,15 +672,17 @@ app.put('/api/bookings/:id', async (req, res) => {
     }
 
     let googleEventId = existingBooking.google_event_id;
+    let googleEventIds = existingBooking.google_event_ids || {};
     // Use the booking's owner email (works even if cookie session expired)
     const calendarEmail = existingBooking.user_email || (req.session.user && req.session.user.email);
 
     // If status is being set to 'cancelled', delete from Google Calendar
-    if (status === 'cancelled' && googleEventId && calendarEmail) {
+    if (status === 'cancelled' && (googleEventId || Object.keys(googleEventIds).length > 0) && calendarEmail) {
       try {
-        await googleCalendarService.deleteEvent(calendarEmail, googleEventId);
+        await googleCalendarService.deleteEvent(calendarEmail, googleEventId, googleEventIds, existingBooking.class_name);
         console.log(`[GCal] Deleted event ${googleEventId} due to cancellation`);
         googleEventId = null; // clear so we don't re-create
+        googleEventIds = {};
       } catch (syncErr) {
         console.error(`[GCal] Failed to delete event on cancellation:`, syncErr.message);
       }
@@ -622,19 +690,14 @@ app.put('/api/bookings/:id', async (req, res) => {
       // Sync updates to Google Calendar
       const updatedEventDetails = { class_name, student_name, date, start_time, end_time, notes, color, location, class_type };
 
-      if (googleEventId) {
-        try {
-          googleEventId = await googleCalendarService.updateEvent(calendarEmail, googleEventId, updatedEventDetails);
-        } catch (syncErr) {
-          console.error(`[GCal] Sync update failed for EventID ${googleEventId}:`, syncErr.message);
+      try {
+        const syncResult = await googleCalendarService.updateEvent(calendarEmail, googleEventId, updatedEventDetails, googleEventIds);
+        if (syncResult) {
+          googleEventId = syncResult.google_event_id;
+          googleEventIds = syncResult.google_event_ids;
         }
-      } else {
-        // Event wasn't synced previously — create it now
-        try {
-          googleEventId = await googleCalendarService.createEvent(calendarEmail, updatedEventDetails);
-        } catch (syncErr) {
-          console.error('[GCal] Sync creation failed:', syncErr.message);
-        }
+      } catch (syncErr) {
+        console.error(`[GCal] Sync update failed:`, syncErr.message);
       }
     }
 
@@ -659,6 +722,7 @@ app.put('/api/bookings/:id', async (req, res) => {
       location,
       class_type,
       google_event_id: googleEventId,
+      google_event_ids: googleEventIds,
       status: finalStatus
     });
 
@@ -682,9 +746,9 @@ app.delete('/api/bookings/:id', async (req, res) => {
     // Delete from Google Calendar using the booking owner's email (not the active session)
     // This ensures deletion works even when the cookie session has expired (e.g. Safari ITP)
     const calendarEmail = booking.user_email || (req.session.user && req.session.user.email);
-    if (booking.google_event_id && calendarEmail) {
+    if ((booking.google_event_id || booking.google_event_ids) && calendarEmail) {
       try {
-        await googleCalendarService.deleteEvent(calendarEmail, booking.google_event_id);
+        await googleCalendarService.deleteEvent(calendarEmail, booking.google_event_id, booking.google_event_ids || {}, booking.class_name);
         console.log(`[GCal] Deleted event ${booking.google_event_id} for booking ${id}`);
       } catch (syncErr) {
         console.error(`[GCal] Failed to delete event ${booking.google_event_id}:`, syncErr.message);
@@ -711,8 +775,12 @@ app.get('/api/students', async (req, res) => {
     const activeEmail = owner || (req.session.user ? req.session.user.email : null);
     
     if (activeEmail) {
-      // Attribute students without a user_email field to the activeEmail so they are not hidden
-      students = students.filter(s => (s.user_email || activeEmail) === activeEmail);
+      const partners = await dbService.getPartners(activeEmail);
+      // Retrieve students owned by any partner in the team
+      students = students.filter(s => {
+        const ownerEmail = (s.user_email || activeEmail).toLowerCase().trim();
+        return partners.includes(ownerEmail);
+      });
     } else {
       students = students.filter(s => (s.user_email || 'mock.student@gmail.com') === 'mock.student@gmail.com');
     }
@@ -807,13 +875,13 @@ app.get('/api/categories', async (req, res) => {
 });
 
 app.post('/api/categories', async (req, res) => {
-  const { name } = req.body;
+  const { name, google_calendar_name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Category name is required' });
   }
   try {
-    const created = await dbService.createCategory(name);
-    res.json({ name: created });
+    const created = await dbService.createCategory(name, google_calendar_name || '');
+    res.json(created);
   } catch (error) {
     console.error('Error creating category:', error);
     res.status(500).json({ error: 'Server error creating category' });
@@ -822,12 +890,12 @@ app.post('/api/categories', async (req, res) => {
 
 app.put('/api/categories/:oldName', async (req, res) => {
   const { oldName } = req.params;
-  const { newName } = req.body;
+  const { newName, google_calendar_name } = req.body;
   if (!newName || !newName.trim()) {
     return res.status(400).json({ error: 'New name is required' });
   }
   try {
-    const result = await dbService.updateCategory(oldName, newName.trim());
+    const result = await dbService.updateCategory(oldName, newName.trim(), google_calendar_name || '');
     res.json(result);
   } catch (error) {
     console.error(`Error updating category ${oldName}:`, error);
