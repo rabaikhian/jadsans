@@ -763,7 +763,8 @@ export default function MasterView({ bookings, students = [], categories = [], o
       'งานนัดลูกค้า': '#f43f5e'
     };
 
-    const baseList = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const rawBaseList = Array.isArray(categories) && categories.length > 0 ? categories : ['งานสอน'];
+    const baseList = rawBaseList.map(c => typeof c === 'string' ? c : (c?.name || ''));
     
     // Union with any category present in students or bookings
     const studentCats = students.map(s => s.category).filter(Boolean);
@@ -1305,7 +1306,7 @@ export default function MasterView({ bookings, students = [], categories = [], o
                         setEditLocation('');
                         setEditColor('hsl(260, 85%, 65%)');
                       }}
-                      options={dynamicCategories.map(c => ({ value: c, label: c }))}
+                      options={dynamicCategories.map(c => ({ value: c.name, label: c.name }))}
                       onEditOption={async (opt) => {
                         const newName = window.prompt(`แก้ไขชื่อหมวดหมู่ "${opt.label}" เป็น:`, opt.label);
                         if (newName && newName.trim()) {
