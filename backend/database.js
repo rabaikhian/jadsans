@@ -398,59 +398,65 @@ export const dbService = {
       const docs = await db.collection('categories').find({}).toArray();
       return docs.map(d => ({
         name: d.name,
-        google_calendar_name: d.google_calendar_name || ''
+        google_calendar_name: d.google_calendar_name || '',
+        user_email: d.user_email || null,
+        is_private: d.is_private || false
       }));
     } else {
       const raw = readJSON(categoriesPath) || [];
       return raw.map(c => {
         if (typeof c === 'string') {
-          return { name: c, google_calendar_name: '' };
+          return { name: c, google_calendar_name: '', user_email: null, is_private: false };
         }
         return {
           name: c.name || '',
-          google_calendar_name: c.google_calendar_name || ''
+          google_calendar_name: c.google_calendar_name || '',
+          user_email: c.user_email || null,
+          is_private: c.is_private || false
         };
       });
     }
   },
 
-  async createCategory(name, google_calendar_name = '') {
+  async createCategory(name, google_calendar_name = '', user_email = null, is_private = false) {
     const trimmed = name.trim();
     if (!trimmed) return null;
 
     if (useMongo) {
       const existing = await db.collection('categories').findOne({ name: trimmed });
       if (existing) {
-        await db.collection('categories').updateOne({ name: trimmed }, { $set: { google_calendar_name } });
-        return { name: trimmed, google_calendar_name };
+        await db.collection('categories').updateOne({ name: trimmed }, { $set: { google_calendar_name, user_email, is_private } });
+        return { name: trimmed, google_calendar_name, user_email, is_private };
       }
 
-      await db.collection('categories').insertOne({ name: trimmed, google_calendar_name });
+      const newEntry = { name: trimmed, google_calendar_name, user_email, is_private };
+      await db.collection('categories').insertOne(newEntry);
       console.log(`[DB] Created category: ${trimmed} in MongoDB`);
-      return { name: trimmed, google_calendar_name };
+      return newEntry;
     } else {
       const categories = readJSON(categoriesPath) || [];
       const index = categories.findIndex(c => (typeof c === 'string' ? c : c.name) === trimmed);
+      const newEntry = { name: trimmed, google_calendar_name, user_email, is_private };
       if (index !== -1) {
-        categories[index] = { name: trimmed, google_calendar_name };
+        categories[index] = newEntry;
         writeJSON(categoriesPath, categories);
-        return { name: trimmed, google_calendar_name };
+        return newEntry;
       }
-      categories.push({ name: trimmed, google_calendar_name });
+      categories.push(newEntry);
       writeJSON(categoriesPath, categories);
       console.log(`[DB] Created category: ${trimmed} in JSON`);
-      return { name: trimmed, google_calendar_name };
+      return newEntry;
     }
   },
 
-  async updateCategory(oldName, newName, google_calendar_name = '') {
+  async updateCategory(oldName, newName, google_calendar_name = '', user_email = null, is_private = false) {
     const trimmedNewName = newName.trim();
 
     if (useMongo) {
       // Update categories collection
       await db.collection('categories').updateOne(
         { name: oldName },
-        { $set: { name: trimmedNewName, google_calendar_name } }
+        { $set: { name: trimmedNewName, google_calendar_name, user_email, is_private } }
       );
 
       // Update students
@@ -471,7 +477,7 @@ export const dbService = {
       const categories = readJSON(categoriesPath) || [];
       const catIndex = categories.findIndex(c => (typeof c === 'string' ? c : c.name) === oldName);
       if (catIndex !== -1) {
-        categories[catIndex] = { name: trimmedNewName, google_calendar_name };
+        categories[catIndex] = { name: trimmedNewName, google_calendar_name, user_email, is_private };
         writeJSON(categoriesPath, categories);
       }
 

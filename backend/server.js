@@ -524,9 +524,23 @@ app.get('/api/bookings', async (req, res) => {
     
     if (activeEmail) {
       const partners = await dbService.getPartners(activeEmail);
-      // Retrieve bookings owned by any partner in the team
+      const allCategories = await dbService.getAllCategories();
+      const normalizedActive = activeEmail.toLowerCase().trim();
+
+      // Retrieve bookings owned by any partner in the team, excluding private ones of others
       bookings = bookings.filter(b => {
         const ownerEmail = (b.user_email || activeEmail).toLowerCase().trim();
+        
+        if (ownerEmail !== normalizedActive) {
+          const catName = (b.class_name || '').toLowerCase().trim();
+          const isPrivateCat = allCategories.some(c => 
+            c.name.toLowerCase().trim() === catName && 
+            (c.user_email || '').toLowerCase().trim() === ownerEmail && 
+            c.is_private
+          );
+          if (isPrivateCat) return false;
+        }
+        
         return partners.includes(ownerEmail);
       });
     } else {
@@ -776,9 +790,23 @@ app.get('/api/students', async (req, res) => {
     
     if (activeEmail) {
       const partners = await dbService.getPartners(activeEmail);
-      // Retrieve students owned by any partner in the team
+      const allCategories = await dbService.getAllCategories();
+      const normalizedActive = activeEmail.toLowerCase().trim();
+
+      // Retrieve students owned by any partner in the team, excluding private ones of others
       students = students.filter(s => {
         const ownerEmail = (s.user_email || activeEmail).toLowerCase().trim();
+        
+        if (ownerEmail !== normalizedActive) {
+          const catName = (s.category || '').toLowerCase().trim();
+          const isPrivateCat = allCategories.some(c => 
+            c.name.toLowerCase().trim() === catName && 
+            (c.user_email || '').toLowerCase().trim() === ownerEmail && 
+            c.is_private
+          );
+          if (isPrivateCat) return false;
+        }
+        
         return partners.includes(ownerEmail);
       });
     } else {
@@ -867,7 +895,27 @@ app.put('/api/students/:id', async (req, res) => {
 app.get('/api/categories', async (req, res) => {
   try {
     const categories = await dbService.getAllCategories();
-    res.json(categories);
+    const activeEmail = req.session.user ? req.session.user.email.toLowerCase().trim() : null;
+
+    if (activeEmail) {
+      const partners = await dbService.getPartners(activeEmail);
+      res.json(categories.filter(c => {
+        const catOwner = (c.user_email || '').toLowerCase().trim();
+        // If it has no owner, it's a default legacy global category
+        if (!catOwner) return true;
+        
+        // If it's owned by the active user, they can see it
+        if (catOwner === activeEmail) return true;
+        
+        // If it's owned by a partner, they can see it ONLY if it's NOT private
+        if (partners.includes(catOwner) && !c.is_private) return true;
+        
+        return false;
+      }));
+    } else {
+      // Anonymous: see only default global categories (no owner)
+      res.json(categories.filter(c => !c.user_email));
+    }
   } catch (error) {
     console.error('Error retrieving categories:', error);
     res.status(500).json({ error: 'Server error retrieving categories' });
@@ -875,12 +923,13 @@ app.get('/api/categories', async (req, res) => {
 });
 
 app.post('/api/categories', async (req, res) => {
-  const { name, google_calendar_name } = req.body;
+  const { name, google_calendar_name, is_private } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Category name is required' });
   }
   try {
-    const created = await dbService.createCategory(name, google_calendar_name || '');
+    const userEmail = req.session.user ? req.session.user.email : null;
+    const created = await dbService.createCategory(name, google_calendar_name || '', userEmail, !!is_private);
     res.json(created);
   } catch (error) {
     console.error('Error creating category:', error);
@@ -890,12 +939,13 @@ app.post('/api/categories', async (req, res) => {
 
 app.put('/api/categories/:oldName', async (req, res) => {
   const { oldName } = req.params;
-  const { newName, google_calendar_name } = req.body;
+  const { newName, google_calendar_name, is_private } = req.body;
   if (!newName || !newName.trim()) {
     return res.status(400).json({ error: 'New name is required' });
   }
   try {
-    const result = await dbService.updateCategory(oldName, newName.trim(), google_calendar_name || '');
+    const userEmail = req.session.user ? req.session.user.email : null;
+    const result = await dbService.updateCategory(oldName, newName.trim(), google_calendar_name || '', userEmail, !!is_private);
     res.json(result);
   } catch (error) {
     console.error(`Error updating category ${oldName}:`, error);

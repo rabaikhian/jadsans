@@ -1320,13 +1320,22 @@ export default function MasterView({ bookings, students = [], categories = [], o
                           );
                           if (googleCalendarName === null) return; // cancelled
 
+                          const currentIsPrivate = existingCatObj ? (existingCatObj.is_private ? 'y' : '') : '';
+                          const privatePrompt = window.prompt(
+                            `ต้องการตั้งค่าให้หมวดหมู่นี้เป็น 'ส่วนตัว' (ซ่อนไม่ให้พาร์ทเนอร์เห็น) หรือไม่?\n(พิมพ์ y หรือ yes เพื่อตั้งเป็นส่วนตัว / ปล่อยว่างเพื่อแชร์ตารางตามปกติ):`,
+                            currentIsPrivate
+                          );
+                          if (privatePrompt === null) return; // cancelled
+                          const isPrivate = privatePrompt.toLowerCase().trim() === 'y' || privatePrompt.toLowerCase().trim() === 'yes';
+
                           try {
                             const res = await apiFetch(`/api/categories/${encodeURIComponent(opt.value)}`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ 
                                 newName: newName.trim(),
-                                google_calendar_name: googleCalendarName.trim()
+                                google_calendar_name: googleCalendarName.trim(),
+                                is_private: isPrivate
                               })
                             });
                             if (res.ok) {
