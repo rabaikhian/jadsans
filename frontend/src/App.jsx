@@ -379,7 +379,7 @@ export default function App() {
                     onClick={() => changeView('partners')}
                   >
                     <Users size={16} />
-                    ทีม / พาร์ทเนอร์
+                    Team / Partner
                   </button>
                 </>
               )}
