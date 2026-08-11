@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Student Scheduling Dashboard</title>
+    <script>
+      window.addEventListener('error', function(e) {
+        alert("Runtime Error:\n" + e.message + "\n\nFile: " + e.filename + "\nLine: " + e.lineno + "\nCol: " + e.colno);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        alert("Unhandled Promise Rejection:\n" + (e.reason ? e.reason.message || e.reason : e));
+      });
+    </script>
     
     <!-- Premium Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
